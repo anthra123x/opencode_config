@@ -8,7 +8,7 @@
 #       and writes observations to project-specific directory.
 #
 # Registered via plugin hooks/hooks.json (auto-loaded when plugin is enabled).
-# Can also be registered manually in ~/.claude/settings.json.
+# Can also be registered manually in ~/.config/opencode/opencode.jsonc (opencode) o ~/.claude/settings.json (Claude Code).
 
 set -e
 

@@ -6,6 +6,8 @@ origin: ECC
 
 # Configure Everything Claude Code (ECC)
 
+> **Para opencode users**: Este skill fue diseñado para Claude Code. opencode usa `~/.config/opencode/` para configuración y `~/.opencode/` para skills. Adapta las rutas `~/.claude/` → `~/.opencode/` al seguir estas instrucciones.
+
 An interactive, step-by-step installation wizard for the Everything Claude Code project. Uses `AskUserQuestion` to guide users through selective installation of skills and rules, then verifies correctness and offers optimization.
 
 ## When to Activate

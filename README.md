@@ -13,7 +13,7 @@ cd opencode_config
 ### Requisitos
 
 - [opencode](https://opencode.ai) CLI
-- (Opcional) [codebase-memory-mcp](https://github.com/anomalyco/codebase-memory-mcp)
+- (Opcional) [codebase-memory-mcp](https://github.com/anomalyco/codebase-memory-mcp) — debe estar en tu PATH
 
 ## Arquitectura
 
@@ -96,7 +96,7 @@ El flujo: `opencode.jsonc` declara instrucciones y rutas de skills. `INSTRUCTION
 
 Grafo de conocimiento del código vía AST. 14 herramientas: `search_graph`, `trace_path`, `get_code_snippet`, `query_graph`, `get_architecture`.
 
-Descargar desde [github.com/anomalyco/codebase-memory-mcp](https://github.com/anomalyco/codebase-memory-mcp) y colocar en `~/.local/bin/codebase-memory-mcp`.
+Descargar desde [github.com/anomalyco/codebase-memory-mcp](https://github.com/anomalyco/codebase-memory-mcp) y colocar en un directorio en tu PATH (ej: `~/.local/bin/`).
 
 UI disponible en `http://localhost:9749`.
 

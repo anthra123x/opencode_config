@@ -1,6 +1,9 @@
 <!-- codebase-memory-mcp:start -->
 # Codebase Knowledge Graph (codebase-memory-mcp)
 
+NOTE: These tools require codebase-memory-mcp to be installed and running.
+If you get "tool not found" errors, fall back to grep/glob immediately.
+
 This configuration uses codebase-memory-mcp to maintain a knowledge graph of the codebase.
 Always prefer MCP graph tools over grep/glob for structural code discovery.
 
@@ -17,7 +20,7 @@ Always prefer MCP graph tools over grep/glob for structural code discovery.
 - When MCP tools return insufficient results
 
 ## Examples
-- Find a handler: `search_graph(name_pattern=".*OrderHandler.*")`
-- Who calls it: `trace_path(function_name="OrderHandler", direction="inbound")`
-- Read source: `get_code_snippet(qualified_name="pkg/orders.OrderHandler")`
+- Find a handler: `search_graph(name_pattern=".*AuthHandler.*")`
+- Who calls it: `trace_path(function_name="AuthHandler", direction="inbound")`
+- Read source: `get_code_snippet(qualified_name="src/auth.AuthHandler")`
 <!-- codebase-memory-mcp:end -->

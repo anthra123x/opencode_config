@@ -763,7 +763,7 @@ def cmd_status(args) -> int:
 
 
 def _warn_legacy_data() -> None:
-    """Warn if legacy ~/.claude/homunculus/ contains data while the active
+    """Warn if legacy ~/.opencode/homunculus/ contains data while the active
     path has moved to the XDG directory."""
     legacy_dir = Path.home() / ".claude" / "homunculus"
     if legacy_dir == HOMUNCULUS_DIR:

@@ -53,7 +53,7 @@ if [ -f "$settings" ] && grep -q '"CLV2_CONFIG"' "$settings" 2>/dev/null; then
   if grep -q '\.claude/homunculus' "$settings" 2>/dev/null; then
     cat >&2 <<WARN
 
-Advisory: ~/.claude/settings.json still sets CLV2_CONFIG under the old path.
+Advisory: ~/.opencode/settings.json still sets CLV2_CONFIG under the old path.
 Update it to: ${NEW}/config.json
 (Not editing settings.json automatically.)
 

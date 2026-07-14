@@ -23,7 +23,20 @@ echo -e "${CYAN}  opencode Configuration Installer${NC}"
 echo -e "${CYAN}══════════════════════════════════════════════${NC}"
 echo ""
 
-# ─── 1. Instalar configuración ─────────────────────────
+# ─── 1. Respaldar configuración existente ──────────────
+if [ -d "$OPENCODE_CONFIG" ]; then
+  BACKUP_CONFIG="${OPENCODE_CONFIG}.bak.$(date +%Y%m%d%H%M%S)"
+  info "Respaldo de configuración: $BACKUP_CONFIG"
+  cp -r "$OPENCODE_CONFIG" "$BACKUP_CONFIG"
+fi
+
+if [ -d "$OPENCODE_SKILLS" ]; then
+  BACKUP_SKILLS="${OPENCODE_SKILLS}.bak.$(date +%Y%m%d%H%M%S)"
+  info "Respaldo de skills: $BACKUP_SKILLS"
+  cp -r "$OPENCODE_SKILLS" "$BACKUP_SKILLS"
+fi
+
+# ─── 2. Instalar configuración ─────────────────────────
 info "Instalando configuración..."
 mkdir -p "$OPENCODE_CONFIG/commands"
 
@@ -32,29 +45,34 @@ cp "$REPO_DIR/config/opencode.json"   "$OPENCODE_CONFIG/opencode.json"
 cp "$REPO_DIR/config/INSTRUCTIONS.md" "$OPENCODE_CONFIG/INSTRUCTIONS.md"
 cp "$REPO_DIR/config/AGENTS.md"       "$OPENCODE_CONFIG/AGENTS.md"
 
-if ls "$REPO_DIR/config/commands/"*.md &>/dev/null 2>&1; then
+if ls "$REPO_DIR/config/commands/"*.md &>/dev/null; then
   cp "$REPO_DIR/config/commands/"*.md "$OPENCODE_CONFIG/commands/"
 fi
 
 log "Configuración instalada en $OPENCODE_CONFIG"
 
-# ─── 2. Instalar skills ────────────────────────────────
+# ─── 3. Instalar skills ────────────────────────────────
 if [ -d "$REPO_DIR/skills" ]; then
-  info "Instalando skills..."
-  mkdir -p "$OPENCODE_SKILLS"
-  count=0
-  for skill_dir in "$REPO_DIR/skills"/*/; do
-    [ -d "$skill_dir" ] || continue
-    skill_name=$(basename "$skill_dir")
-    target="$OPENCODE_SKILLS/$skill_name"
-    mkdir -p "$target"
-    cp -r "$skill_dir"/* "$target/"
-    count=$((count + 1))
-  done
-  log "$count skills instalados en $OPENCODE_SKILLS"
+  SKILL_COUNT=$(find "$REPO_DIR/skills" -mindepth 1 -maxdepth 1 -type d | wc -l)
+  if [ "$SKILL_COUNT" -eq 0 ]; then
+    warn "No se encontraron skills en $REPO_DIR/skills/"
+  else
+    info "Instalando $SKILL_COUNT skills..."
+    mkdir -p "$OPENCODE_SKILLS"
+    for skill_dir in "$REPO_DIR/skills"/*/; do
+      [ -d "$skill_dir" ] || continue
+      skill_name=$(basename "$skill_dir")
+      target="$OPENCODE_SKILLS/$skill_name"
+      mkdir -p "$target"
+      cp -r "$skill_dir"/* "$target/"
+    done
+    # Fix executable permissions on scripts
+    find "$OPENCODE_SKILLS" \( -name "*.sh" -o -name "*.mjs" -o -name "*.py" \) -exec chmod +x {} + 2>/dev/null || true
+    log "$SKILL_COUNT skills instalados en $OPENCODE_SKILLS"
+  fi
 fi
 
-# ─── 3. Resumen ────────────────────────────────────────
+# ─── 4. Resumen ────────────────────────────────────────
 echo ""
 echo -e "${CYAN}══════════════════════════════════════════════${NC}"
 echo -e "${GREEN}  Instalación completa${NC}"
@@ -69,14 +87,12 @@ for cmd in "$OPENCODE_CONFIG"/commands/*.md; do
   [ -f "$cmd" ] && echo "    • commands/$(basename "$cmd")"
 done
 
-skill_count=$(find "$OPENCODE_SKILLS" -maxdepth 1 -type d | wc -l)
-skill_count=$((skill_count - 1)) # subtract parent dir
+INSTALLED_SKILLS=$(find "$OPENCODE_SKILLS" -mindepth 1 -maxdepth 1 -type d -not -name '.*' -not -name '*.bak.*' | wc -l)
 echo ""
-echo "  Skills: $skill_count"
-echo ""
+echo "  Skills: $INSTALLED_SKILLS"
 
-warn "Ya instalado en ~/.opencode/skills/ — si ya tenías skills, se sobrescribieron."
 echo ""
-echo -e "${YELLOW}  Siguiente paso recomendado:${NC}"
+echo -e "${YELLOW}  Siguiente paso:${NC}"
 echo "    Revisa INSTRUCTIONS.md para entender la metodología y los skills disponibles."
+echo "    Para el MCP codebase-memory-mcp, asegúrate de que el binario esté en tu PATH."
 echo ""

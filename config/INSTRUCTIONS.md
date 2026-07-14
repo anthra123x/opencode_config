@@ -52,12 +52,12 @@ Cada tarea sigue este ciclo. Los skills se activan según la fase:
 ### 4. Validación
 Pase obligatorio antes de dar una tarea por completa:
 
-1. **Build**: `npm run build` o equivalente
-2. **Lint**: `npm run lint` o `lint-format`
-3. **Typecheck**: `tsc --noEmit` o equivalente
-4. **Tests**: suite completa + `check-coverage` (≥80%)
+1. **Build**: `npm run build` o `go build` o `cargo build` según el stack
+2. **Lint**: `npm run lint` o `ruff check .` según el stack
+3. **Typecheck**: `tsc --noEmit` o `pyright` o equivalente
+4. **Tests**: suite completa + `check-coverage` (≥80%) — tool integrada
 5. **E2E**: `e2e-testing` para flujos críticos
-6. **Seguridad**: `security-audit` si tocas auth/input/API
+6. **Seguridad**: `security-audit` si tocas auth/input/API — tool integrada
 7. **Producción**: `production-audit` antes de deploy
 8. **Verificación integral**: `verification-loop` (build → types → lint → tests → security → diff)
 
