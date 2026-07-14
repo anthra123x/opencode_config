@@ -230,28 +230,55 @@ cmd_validate() {
 
   # Check JSONC is valid
   if [ -f "$ECC_CONFIG/opencode.jsonc" ]; then
-    if python3 -c "
-import json, re
-with open('$ECC_CONFIG/opencode.jsonc') as f:
-    content = re.sub(r'//.*', '', f.read())
-    json.loads(content)
-" 2>/dev/null; then
+    local jsonc_file="$ECC_CONFIG/opencode.jsonc"
+    local py_script
+    py_script=$(mktemp)
+    cat >"$py_script" <<'PYEOF'
+import json, sys
+
+def strip_jsonc(content):
+    result = []
+    i = 0
+    in_string = False
+    escape = False
+    while i < len(content):
+        ch = content[i]
+        if ch == '"' and not escape:
+            in_string = not in_string
+            result.append(ch)
+        elif ch == '\\' and not escape and in_string:
+            escape = True
+            result.append(ch)
+        elif ch == '/' and i + 1 < len(content) and content[i+1] == '/' and not in_string:
+            while i < len(content) and content[i] != '\n':
+                i += 1
+            continue
+        elif ch == '/' and i + 1 < len(content) and content[i+1] == '*' and not in_string:
+            i += 2
+            while i + 1 < len(content):
+                if content[i] == '*' and content[i+1] == '/':
+                    i += 2
+                    break
+                i += 1
+            continue
+        else:
+            result.append(ch)
+            if escape:
+                escape = False
+        i += 1
+    return ''.join(result)
+
+with open(sys.argv[1]) as f:
+    clean = strip_jsonc(f.read())
+json.loads(clean)
+PYEOF
+    if python3 "$py_script" "$jsonc_file" 2>/dev/null; then
       log "  ✓ opencode.jsonc (valid)"
     else
-      # Try with comment removal
-      if python3 -c "
-import json, re
-with open('$ECC_CONFIG/opencode.jsonc') as f:
-    content = re.sub(r'//.*', '', f.read())
-    content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
-    json.loads(content)
-" 2>/dev/null; then
-        log "  ✓ opencode.jsonc (valid)"
-      else
-        error "  ✗ opencode.jsonc (invalid)"
-        errors=$((errors + 1))
-      fi
+      error "  ✗ opencode.jsonc (invalid)"
+      errors=$((errors + 1))
     fi
+    rm -f "$py_script"
   fi
 
   echo ""
