@@ -1,0 +1,390 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ecc — opencode Configuration Manager CLI
+# Installed to ~/.local/bin/ecc by install.sh
+
+ECC_CONFIG="${ECC_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
+ECC_SKILLS="${ECC_SKILLS:-$HOME/.opencode/skills}"
+ECC_ROOT="${ECC_ROOT:-$HOME/.local/share/opencode}"
+
+# Source installed libraries
+if [ -f "$ECC_CONFIG/lib/ui.sh" ]; then
+  source "$ECC_CONFIG/lib/ui.sh"
+  setup_ui
+fi
+if [ -f "$ECC_CONFIG/lib/paths.sh" ]; then
+  source "$ECC_CONFIG/lib/paths.sh"
+  setup_paths
+fi
+if [ -f "$ECC_CONFIG/lib/utils.sh" ]; then
+  source "$ECC_CONFIG/lib/utils.sh"
+  setup_utils
+fi
+
+# ─── Help ───
+
+show_help() {
+  cat <<EOF
+Usage: ecc <command> [options]
+
+Commands:
+  doctor      Run diagnostic checks on the installation
+  configure   Re-run configuration wizard
+  status      Show installation status
+  validate    Verify integrity of installed files
+  update      Pull latest version from git repository
+  uninstall   Remove all installed files (with backup)
+  help        Show this help message
+
+Examples:
+  ecc doctor
+  ecc status
+  ecc configure
+  ecc update
+  ecc uninstall
+
+Report issues: https://github.com/anthra123x/opencode_config
+EOF
+}
+
+# ─── Doctor ───
+
+cmd_doctor() {
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}  ecc doctor — System Diagnostic${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo ""
+  local issues=0
+
+  # opencode agent
+  if command -v opencode &>/dev/null; then
+    log "opencode CLI: $(command -v opencode)"
+  elif command -v claude &>/dev/null; then
+    log "Claude Code CLI: $(command -v claude)"
+  else
+    issue "No opencode or claude CLI found in PATH"
+    issues=$((issues + 1))
+  fi
+
+  # Config directory
+  if [ -d "$ECC_CONFIG" ]; then
+    log "Config directory: $ECC_CONFIG"
+    for f in opencode.jsonc INSTRUCTIONS.md AGENTS.md; do
+      [ -f "$ECC_CONFIG/$f" ] && log "  ✓ $f" || { warn "  ✗ $f (missing)"; issues=$((issues + 1)); }
+    done
+  else
+    issue "Config directory not found: $ECC_CONFIG"
+    issues=$((issues + 1))
+  fi
+
+  # Skills
+  if [ -d "$ECC_SKILLS" ]; then
+    local scount; scount=$(find "$ECC_SKILLS" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
+    log "Skills directory: $ECC_SKILLS ($scount skills)"
+  else
+    warn "Skills directory not found: $ECC_SKILLS"
+    issues=$((issues + 1))
+  fi
+
+  # MCP
+  if command -v codebase-memory-mcp &>/dev/null; then
+    log "MCP server: codebase-memory-mcp"
+  else
+    warn "MCP server not found (optional: install codebase-memory-mcp)"
+  fi
+
+  # PATH
+  local bindir="${HOME}/.local/bin"
+  if in_path "$bindir"; then
+    log "\$PATH includes $bindir"
+  else
+    warn "\$PATH does not include $bindir — ecc commands won't work globally"
+    issues=$((issues + 1))
+  fi
+
+  # bash version
+  if [[ ${BASH_VERSINFO[0]} -ge 4 ]]; then
+    log "bash: ${BASH_VERSION}"
+  else
+    warn "bash 4+ required (found ${BASH_VERSINFO[0]})"
+    issues=$((issues + 1))
+  fi
+
+  # git
+  if command -v git &>/dev/null; then
+    log "git: $(git --version 2>/dev/null | head -1)"
+  else
+    warn "git not found (updates via 'ecc update' unavailable)"
+  fi
+
+  echo ""
+  if [ "$issues" -eq 0 ]; then
+    echo -e "${C_GREEN}${C_BOLD}✓ All checks passed${C_NC}"
+  else
+    echo -e "${C_YELLOW}${C_BOLD}⚠ $issues issue(s) found${C_NC}"
+    echo "  Run 'ecc validate' for detailed file integrity check"
+  fi
+}
+
+# ─── Status ───
+
+cmd_status() {
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}  ecc status — Installation Overview${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo ""
+  echo -e "  ${C_BOLD}Config:${C_NC}"
+  if [ -d "$ECC_CONFIG" ]; then
+    echo "    Path: $ECC_CONFIG"
+    local csize; csize=$(du -sh "$ECC_CONFIG" 2>/dev/null | cut -f1)
+    echo "    Size: ${csize:-unknown}"
+    local ccount; ccount=$(find "$ECC_CONFIG" -maxdepth 1 -type f 2>/dev/null | wc -l)
+    echo "    Files: $ccount"
+  else
+    warn "    Not installed"
+  fi
+  echo ""
+  echo -e "  ${C_BOLD}Skills:${C_NC}"
+  if [ -d "$ECC_SKILLS" ]; then
+    local scount; scount=$(find "$ECC_SKILLS" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
+    echo "    Path: $ECC_SKILLS"
+    echo "    Installed: $scount skills"
+    if [ "$scount" -gt 0 ]; then
+      echo ""
+      echo "    Listing:"
+      for d in "$ECC_SKILLS"/*/; do
+        [ -d "$d" ] || continue
+        local sn; sn=$(basename "$d")
+        local has_skill=false
+        [ -f "$d/SKILL.md" ] && has_skill=true
+        if $has_skill; then
+          echo -e "      ${C_GREEN}✓${C_NC} $sn"
+        else
+          echo -e "      ${C_DIM}○${C_NC} $sn"
+        fi
+      done
+    fi
+  else
+    warn "    Not installed"
+  fi
+  echo ""
+  echo -e "  ${C_BOLD}CLI:${C_NC}"
+  local ecc_path; ecc_path=$(command -v ecc 2>/dev/null || echo "not in PATH")
+  echo "    $ecc_path"
+  echo ""
+  echo -e "  ${C_BOLD}MCP:${C_NC}"
+  if command -v codebase-memory-mcp &>/dev/null; then
+    log "    codebase-memory-mcp installed"
+  else
+    warn "    Not installed (optional)"
+  fi
+}
+
+# ─── Validate ───
+
+cmd_validate() {
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}  ecc validate — File Integrity Check${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo ""
+  local errors=0
+
+  # Check required files exist
+  local -a required=(
+    "$ECC_CONFIG/opencode.jsonc"
+    "$ECC_CONFIG/INSTRUCTIONS.md"
+    "$ECC_CONFIG/AGENTS.md"
+  )
+
+  for f in "${required[@]}"; do
+    if [ -f "$f" ]; then
+      log "  ✓ $(basename "$f")"
+    else
+      error "  ✗ $f (missing)"
+      errors=$((errors + 1))
+    fi
+  done
+
+  # Check skills have SKILL.md
+  if [ -d "$ECC_SKILLS" ]; then
+    for d in "$ECC_SKILLS"/*/; do
+      [ -d "$d" ] || continue
+      local sn; sn=$(basename "$d")
+      if [ ! -f "$d/SKILL.md" ]; then
+        error "  ✗ $sn/SKILL.md (missing)"
+        errors=$((errors + 1))
+      fi
+    done
+  fi
+
+  # Check MCP config is valid JSON
+  if [ -f "$ECC_CONFIG/opencode.json" ]; then
+    if python3 -c "import json; json.load(open('$ECC_CONFIG/opencode.json'))" 2>/dev/null; then
+      log "  ✓ opencode.json (valid JSON)"
+    else
+      error "  ✗ opencode.json (invalid JSON)"
+      errors=$((errors + 1))
+    fi
+  fi
+
+  # Check JSONC is valid
+  if [ -f "$ECC_CONFIG/opencode.jsonc" ]; then
+    if python3 -c "
+import json, re
+with open('$ECC_CONFIG/opencode.jsonc') as f:
+    content = re.sub(r'//.*', '', f.read())
+    json.loads(content)
+" 2>/dev/null; then
+      log "  ✓ opencode.jsonc (valid)"
+    else
+      # Try with comment removal
+      if python3 -c "
+import json, re
+with open('$ECC_CONFIG/opencode.jsonc') as f:
+    content = re.sub(r'//.*', '', f.read())
+    content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+    json.loads(content)
+" 2>/dev/null; then
+        log "  ✓ opencode.jsonc (valid)"
+      else
+        error "  ✗ opencode.jsonc (invalid)"
+        errors=$((errors + 1))
+      fi
+    fi
+  fi
+
+  echo ""
+  if [ "$errors" -eq 0 ]; then
+    echo -e "${C_GREEN}${C_BOLD}✓ All files validated successfully${C_NC}"
+  else
+    echo -e "${C_RED}${C_BOLD}✗ $errors error(s) found${C_NC}"
+  fi
+}
+
+# ─── Configure ───
+
+cmd_configure() {
+  if [ -f "$ECC_CONFIG/scripts/configure.sh" ]; then
+    exec "$ECC_CONFIG/scripts/configure.sh" "$@"
+  else
+    error "Configuration script not found"
+    echo "Re-run install.sh to restore it"
+    exit 1
+  fi
+}
+
+# ─── Update ───
+
+cmd_update() {
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}  ecc update — Pull Latest Version${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo ""
+
+  local repo_dir
+  # Try to find the repo
+  if [ -d "$ECC_ROOT/repo" ]; then
+    repo_dir="$ECC_ROOT/repo"
+  elif git rev-parse --show-toplevel 2>/dev/null; then
+    repo_dir=$(git rev-parse --show-toplevel 2>/dev/null || true)
+  fi
+
+  if [ -n "${repo_dir:-}" ] && [ -d "${repo_dir:-}/.git" ]; then
+    echo "  Repository: $repo_dir"
+    (cd "$repo_dir" && git pull) && log "Repository updated" || {
+      error "Failed to pull latest changes"
+      exit 1
+    }
+    # Re-run install
+    echo ""
+    info "Re-applying configuration..."
+    (cd "$repo_dir" && exec ./install.sh)
+  else
+    warn "Repository not found locally"
+    echo ""
+    echo "  To update manually:"
+    echo "    git clone https://github.com/anthra123x/opencode_config.git"
+    echo "    cd opencode_config"
+    echo "    ./install.sh"
+  fi
+}
+
+# ─── Uninstall ───
+
+cmd_uninstall() {
+  echo -e "${C_RED}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_RED}${C_BOLD}  ecc uninstall — Remove Configuration${C_NC}"
+  echo -e "${C_RED}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo ""
+  echo -e "${C_RED}This will remove:${C_NC}"
+  echo "    $ECC_CONFIG"
+  echo "    $ECC_SKILLS"
+  echo "    $HOME/.local/bin/ecc"
+  echo ""
+
+  local answer
+  read -rp "Are you sure? Type 'yes' to confirm: " answer
+  if [ "$answer" != "yes" ]; then
+    echo "Cancelled."
+    exit 0
+  fi
+
+  # Backup first
+  local bk
+  if [ -d "$ECC_CONFIG" ]; then
+    bk=$(backup_dir "$ECC_CONFIG")
+    info "Config backed up: $bk"
+  fi
+  if [ -d "$ECC_SKILLS" ]; then
+    bk=$(backup_dir "$ECC_SKILLS")
+    info "Skills backed up: $bk"
+  fi
+
+  # Remove
+  rm -rf "$ECC_CONFIG" && log "Removed config: $ECC_CONFIG" || warn "Failed to remove $ECC_CONFIG"
+  rm -rf "$ECC_SKILLS" && log "Removed skills: $ECC_SKILLS" || warn "Failed to remove $ECC_SKILLS"
+  rm -f "$HOME/.local/bin/ecc" && log "Removed CLI: $HOME/.local/bin/ecc" || true
+
+  echo ""
+  log "Uninstall complete. Backups saved alongside original locations."
+  echo ""
+  echo "If you want to reinstall later:"
+  echo "  git clone https://github.com/anthra123x/opencode_config.git"
+  echo "  cd opencode_config && ./install.sh"
+}
+
+# ─── Main dispatch ───
+
+main() {
+  case "${1:-help}" in
+    doctor|check)
+      cmd_doctor
+      ;;
+    configure|config|setup)
+      cmd_configure "${@:2}"
+      ;;
+    status|info)
+      cmd_status
+      ;;
+    validate|verify)
+      cmd_validate
+      ;;
+    update|upgrade)
+      cmd_update
+      ;;
+    uninstall|remove)
+      cmd_uninstall
+      ;;
+    help|--help|-h|"")
+      show_help
+      ;;
+    *)
+      echo "ecc: unknown command '$1'"
+      echo "Run 'ecc help' for usage"
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
