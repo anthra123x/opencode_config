@@ -1,16 +1,157 @@
-# opencode Configuration
+# ⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫
 
-Configuración portable y profesional para [opencode](https://opencode.ai) / Claude Code.
-Incluye 33 skills ECC especializados, metodología de ingeniería, servidores MCP y un CLI de gestión.
+<div align="center">
+
+[![OpenCode Compatible](https://img.shields.io/badge/OpenCode-v1.18.29+-blueviolet?style=for-the-badge&logo=code)](https://opencode.ai)
+[![Multi-Agent](https://img.shields.io/badge/Architecture-Multi--Agent_Swarm-cyan?style=for-the-badge&logo=diagram)](./agents)
+[![MCP Native](https://img.shields.io/badge/MCP-SQLite_FTS5-blue?style=for-the-badge&logo=sqlite)](./mcp)
+[![Theme](https://img.shields.io/badge/TUI_Theme-TokyoNight-purple?style=for-the-badge&logo=visualstudiocode)](./config/tui.json)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](./LICENSE)
+
+**Transforma OpenCode vanilla en una suite de ingeniería de software multi-agente con persistencia cross-sesión, coordinación por bus MCP y estética visual estilizada.**
+
+```text
+╭──────────────────────────────────────────────────────────────╮
+│   ⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫                              │
+│   🛡️  Multi-Agent Architecture & Persistent Context Memory    │
+╰──────────────────────────────────────────────────────────────╯
+```
+
+</div>
+
+---
+
+## 📑 Tabla de Contenidos
+
+- [🌟 ¿Qué es OpenCode Swarm?](#-qué-es-opencode-swarm)
+- [🎨 Identidad Visual y Transformación TUI](#-identidad-visual-y-transformación-tui)
+- [👥 Roster de Sub-Agentes Especializados](#-roster-de-sub-agentes-especializados)
+- [🧠 Servidores MCP Nativos](#-servidores-mcp-nativos)
+  - [1. Memoria Persistente de Contexto (`context-memory`)](#1-memoria-persistente-de-contexto-context-memory)
+  - [2. Bus de Coordinación y Tareas (`team-collab`)](#2-bus-de-coordinación-y-tareas-team-collab)
+- [⚡ Slash Commands Disponibles](#-slash-commands-disponibles)
+- [🚀 Instalación y Puesta en Marcha](#-instalación-y-puesta-en-marcha)
+- [🛠️ CLI de Gestión: `ecc`](#️-cli-de-gestión-ecc)
+- [🔄 Flujo de Trabajo y Ciclo Cross-Sesión](#-flujo-de-trabajo-y-ciclo-cross-sesión)
+- [🧪 Simulación de Sesión y Verificación](#-simulación-de-sesión-y-verificación)
+- [📂 Estructura del Repositorio](#-estructura-del-repositorio)
+- [📋 Requisitos del Sistema](#-requisitos-del-sistema)
+
+---
+
+## 🌟 ¿Qué es OpenCode Swarm?
+
+**OpenCode Swarm Edition** es una capa de configuración e inteligencia global diseñada para evolucionar OpenCode más allá de un asistente conversacional estándar, convirtiéndolo en un **equipo autónomo de ingeniería de software**.
+
+### Pilares Fundamentales:
+- **Persistencia Cross-Sesión por Proyecto**: El equipo no pierde el hilo al cerrar OpenCode. Recuerda las decisiones de arquitectura, los contratos de API y el progreso de las tareas entre diferentes sesiones de trabajo en el mismo proyecto.
+- **División de Responsabilidades (SoC)**: Seis sub-agentes especializados con roles, permisos y skills acotados para garantizar calidad de código sin alucinaciones ni atajos descuidados.
+- **Handoffs Transparentes por MCP**: Cuando `@backend` termina un modelo o API, publica el contrato en el bus para que `@frontend` lo consuma de inmediato sin pedir aclaraciones al usuario.
+- **Cero Dependencias Externas**: Los servidores MCP operan sobre **Python 3 puro y SQLite FTS5 nativo**, sin requerir daemons en segundo plano ni paquetes pesados de Node/Docker.
+
+---
+
+## 🎨 Identidad Visual y Transformación TUI
+
+OpenCode Swarm no solo amplía la inteligencia, sino que transforma completamente la presencia visual de la herramienta para acentuar que **ya no es la versión vanilla**:
+
+- **Tipografía Estilizada**: Encabezados, saludos y dashboards decorados con tipografía en versalitas: `⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫`.
+- **Integración con la Pestaña del Terminal**: Secuencias ANSI OSC que renombran dinámicamente tu terminal/pestaña a `⚡ ᴏᴘᴇɴᴄᴏᴅᴇ [ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ] — <nombre-proyecto>`.
+- **Tema TokyoNight (`config/tui.json`)**: Paleta oscura de alto contraste con diffs apilados (`diff_style: "stacked"`), navegación acelerada y soporte de ratón.
+- **Lanzador Wrapper (`templates/opencode-wrapper.sh` -> `~/.local/bin/opencode`)**: Intercepta la llamada a OpenCode para inyectar los metadatos visuales y presentar el banner de bienvenida antes del TUI.
+- **Plugin Swarm HUD (`config/plugins/team-hud.ts`)**: Inyecta en el ciclo de vida de OpenCode el estado de los agentes activos y la configuración por defecto.
+
+---
+
+## 👥 Roster de Sub-Agentes Especializados
+
+Cada agente cuenta con su propio color de distintivo en el TUI, prompt operacional y paquete de skills:
+
+| Agente | Color | Modo | Rol & Responsabilidad | Skills Clave Integrados |
+|---|---|---|---|---|
+| **`@orchestrator`** | `#8B5CF6` (Morado) | `primary` | **Líder Técnico & Arquitecto**: Coordina el enjambre, desglosa épicas en tareas, gestiona memoria y sintetiza entregables. | `council`, `code-tour`, `strategic-compact`, `agent-sort` |
+| **`@backend`** | `#3B82F6` (Azul) | `subagent` | **Ingeniero Backend & BD**: APIs REST/GraphQL, esquemas relacionales, migraciones y TDD estricto. | `postgres-patterns`, `prisma-patterns`, `mysql-patterns`, `database-migrations`, `tdd-workflow` |
+| **`@frontend`** | `#EC4899` (Rosa Neón) | `subagent` | **Ingeniero UI/UX & Motion**: Interfaces accesibles, diseño anti-slop, animaciones fluidas con resortes y tokens de diseño. | `impeccable`, `design-taste-frontend`, `emil-design-eng`, `review-animations`, `animation-vocabulary` |
+| **`@git-flow`** | `#10B981` (Verde Esmeralda) | `subagent` | **Control de Flujo Git & GitHub**: Commits semánticos, ramas seguras, resolución de conflictos y resúmenes de PR. | `git-flow-pro`, `verification-loop` |
+| **`@qa-auditor`** | `#F59E0B` (Ámbar) | `subagent` | **Auditor de Calidad & Seguridad**: Loop de verificación en 6 etapas, cobertura $\ge$ 80%, auditorías OWASP y regresiones IA. | `verification-loop`, `production-audit`, `ai-regression-testing`, `eval-harness` |
+| **`@devops`** | `#06B6D4` (Cian) | `subagent` | **Infraestructura & Contenedores**: Dockerfiles multi-stage, rootless, Compose, CI/CD y despliegues reproducibles. | `docker-patterns`, `lint-format` |
+
+---
+
+## 🧠 Servidores MCP Nativos
+
+La coordinación y persistencia se fundamentan en dos servidores MCP creados desde cero, ubicados en `mcp/` y registrados en `config/opencode.json`:
 
 ```
-  ╔══════════════════════════════════════╗
-  ║       opencode Configuration         ║
-  ║          📦 ECC Manager v1           ║
-  ╚══════════════════════════════════════╝
+                    ┌─────────────────────────┐
+                    │      @orchestrator      │
+                    └────────────┬────────────┘
+                                 │
+           ┌─────────────────────┴─────────────────────┐
+           ▼                                           ▼
+┌──────────────────────┐                   ┌──────────────────────┐
+│    context-memory    │                   │     team-collab      │
+│  (SQLite FTS5 + DB)  │                   │  (Swarm Bus & Tasks) │
+├──────────────────────┤                   ├──────────────────────┤
+│ • remember           │                   │ • team_post_task     │
+│ • recall             │                   │ • team_claim_task    │
+│ • get_active_context │                   │ • team_handoff       │
+│ • get_session_boot.. │                   │ • team_share_artif.. │
+│ • list_memories      │                   │ • team_get_status    │
+└──────────────────────┘                   └──────────────────────┘
+           ▲                                           ▲
+           │                                           │
+ ┌─────────┴─────────┐                       ┌─────────┴─────────┐
+ │     @backend      │ ──[ team_handoff ]──> │     @frontend     │
+ └───────────────────┘                       └───────────────────┘
 ```
 
-## Quickstart
+### 1. Memoria Persistente de Contexto (`context-memory`)
+- **Ubicación de base de datos**: `~/.opencode/memory/context_memory.db`.
+- **Motor de indexación**: SQLite **FTS5** para búsquedas de texto completo de alta velocidad.
+- **Aislamiento por proyecto**: Diferencia entre memorias `global` (para todas las sesiones) y de proyecto (detectadas por el directorio de trabajo o rama Git).
+- **Herramientas**:
+  - `remember`: Almacena decisiones (`architecture`, `convention`, `decision`, `learning`, `user_preference`).
+  - `recall`: Búsqueda semántica y FTS5 con cálculo de relevancia BM25.
+  - `get_active_context`: Carga el resumen de decisiones vigentes del proyecto.
+  - `get_session_bootstrap`: Inicializa una sesión inyectando contexto previo y estado de tareas.
+  - `list_memories`: Catálogo paginado por categoría.
+
+### 2. Bus de Coordinación y Tareas (`team-collab`)
+- **Ubicación de base de datos**: `~/.opencode/team/team_collab.db`.
+- **Tablero de tareas cross-sesión**: Mantiene tareas con estados `todo`, `in_progress`, `blocked`, `completed` y prioridades `low`, `normal`, `high`, `urgent`.
+- **Intercambio de contratos**: Los agentes comparten artefactos tipados (`api_spec`, `schema`, `design_token`, `test_report`).
+- **Handoffs formales**: Traspaso documentado entre agentes (`@backend` $\rightarrow$ `@frontend`).
+- **Herramientas**:
+  - `team_post_task`, `team_claim_task`, `team_update_task`, `team_list_tasks`.
+  - `team_share_artifact`, `team_get_artifact`, `team_list_artifacts`.
+  - `team_handoff`: Entrega directa de responsabilidades con notas y enlaces a artefactos.
+  - `team_broadcast`, `team_read_feed`: Feed de anuncios y bloqueos entre agentes.
+  - `team_get_status`: Dashboard visual del enjambre.
+
+---
+
+## ⚡ Slash Commands Disponibles
+
+Puedes ejecutar estos comandos directamente dentro de la interfaz de OpenCode:
+
+| Comando | Acción |
+|---|---|
+| `/team` | Despliega el dashboard completo del enjambre, estado de los 6 agentes y el tablero de tareas. |
+| `/tasks` | Consulta el tablero interactivo de tareas del proyecto actual. |
+| `/memory [query]` | Realiza una búsqueda o muestra el contexto activo persistido en SQLite FTS5. |
+| `/handoff` | Asiste en el traspaso documentado de una tarea entre dos especialistas. |
+| `/backend` | Convoca a `@backend` para modelado de BD, endpoints, migraciones o lógica de servidor. |
+| `/frontend` | Convoca a `@frontend` para componentes UI, accesibilidad, motion y refinamiento visual. |
+| `/git-flow` | Convoca a `@git-flow` para auditar git status/diffs y generar commits convencionales. |
+| `/qa` | Convoca a `@qa-auditor` para ejecutar el loop de verificación y auditoría de seguridad. |
+| `/graph-brain` | Indexa y mapea la arquitectura del código fuente mediante AST. |
+
+---
+
+## 🚀 Instalación y Puesta en Marcha
+
+### Instalación Rápida:
 
 ```bash
 git clone https://github.com/anthra123x/opencode_config.git
@@ -18,205 +159,169 @@ cd opencode_config
 ./install.sh
 ```
 
-## Requisitos
+El instalador interactivo (`install.sh`):
+1. Detecta tu entorno (OpenCode, Python 3 con FTS5, Bash y Git).
+2. Pregunta si deseas instalación **Quickstart** (recomendada) o **Personalizada**.
+3. Instala los 6 agentes en `~/.config/opencode/agents/`.
+4. Instala y valida los servidores MCP nativos en `~/.config/opencode/mcp/`.
+5. Configura `opencode.jsonc`, `opencode.json`, `tui.json`, `AGENTS.md` e `INSTRUCTIONS.md`.
+6. Enlaza los ejecutables de soporte (`ecc`, `opencode-context-memory`, `opencode-team-collab`) en `~/.local/bin/`.
+7. Instala el wrapper visual con la tipografía estilizada.
 
-- **bash >= 4** (casi todos los sistemas lo tienen)
-- **whiptail** (para interfaz TUI — fallback a texto plano si no está)
-- **opencode** o **Claude Code** en PATH
-- **(Opcional)** [codebase-memory-mcp](https://github.com/anomalyco/codebase-memory-mcp)
+---
 
-Instalar whiptail si hace falta:
+## 🛠️ CLI de Gestión: `ecc`
 
-```bash
-# Debian/Ubuntu
-sudo apt install whiptail
-
-# macOS
-brew install newt
-
-# Arch Linux
-sudo pacman -S libnewt
-```
-
-## CLI: `ecc`
-
-Después de instalar, el comando `ecc` está disponible:
-
-| Comando | Descripción |
-|---------|-------------|
-| `ecc doctor` | Diagnóstico completo del sistema |
-| `ecc status` | Estado de la instalación |
-| `ecc validate` | Verifica integridad de archivos |
-| `ecc configure` | Re-ejecuta el wizard de configuración |
-| `ecc update` | Trae la última versión del repo |
-| `ecc uninstall` | Remueve todo con backup |
-
-Ejemplos:
+El comando `ecc` queda instalado en tu `$PATH` (`~/.local/bin/ecc`) para controlar el enjambre directamente desde la terminal:
 
 ```bash
-# Verificar que todo funciona
+# Diagnóstico completo de componentes, agentes y servidores MCP
 ecc doctor
 
-# Ver qué skills están instalados
+# Ver el tablero del equipo y tareas activas en el directorio actual
+ecc team
+
+# Consultar la memoria persistente del proyecto o buscar un tema
+ecc memory "auth endpoints"
+
+# Vista general del estado de instalación
 ecc status
 
-# Re-configurar paths o preferencias
+# Validar la sintaxis e integridad de todos los archivos de configuración
+ecc validate
+
+# Re-ejecutar el asistente interactivo de configuración
 ecc configure
-```
 
-Si `ecc` no está en tu PATH después de instalar:
-
-```bash
-export PATH="$PATH:$HOME/.local/bin"
-# Agrega esa línea a ~/.bashrc, ~/.zshrc o equivalente
-```
-
-## Instalación: dos modos
-
-### Quickstart (recomendado)
-
-Modo con mínimas preguntas. Ideal si piensas pedirle a tu agente AI que configure todo:
-
-```bash
-./install.sh
-# → Responde [Yes] a Quickstart
-# → Ingresa tu nombre y GitHub username
-# → Listo. El agente cargará las instrucciones automáticamente
-```
-
-### Manual
-
-Control total sobre cada componente:
-
-```bash
-./install.sh
-# → Responde [No] a Quickstart
-# → Selecciona componentes (config, skills, MCP, etc.)
-# → Configura paths personalizados
-```
-
-## Arquitectura
-
-```
-repo/
-├── ecc                        ← CLI tool (se instala en ~/.local/bin)
-├── install.sh                 ← Instalador TUI (whiptail)
-├── lib/
-│   ├── ui.sh                  ← Terminal UI (whiptail + fallback)
-│   ├── paths.sh               ← Resolución de rutas
-│   └── utils.sh               ← Utilidades comunes
-├── scripts/
-│   ├── configure.sh           ← Wizard de configuración
-│   └── uninstall.sh           ← Remoción limpia
-├── templates/                 ← Perfiles de instalación
-├── config/
-│   ├── opencode.jsonc         ← Punto de entrada
-│   ├── opencode.json          ← Servidores MCP
-│   ├── INSTRUCTIONS.md        ← Metodología de ingeniería
-│   ├── AGENTS.md              ← Reglas del grafo de conocimiento
-│   └── commands/
-│       └── graph-brain.md     ← Comando /graph-brain
-└── skills/                    ← 33 skills ECC
-    ├── tdd-workflow/
-    ├── impeccable/
-    ├── postgres-patterns/
-    └── ...
-```
-
-Flujo: `opencode.jsonc` declara instrucciones y skills paths. `INSTRUCTIONS.md` se inyecta como system prompt orquestando los skills según la fase de trabajo.
-
-## Skills incluidos
-
-### Desarrollo general
-- **tdd-workflow** — TDD con cobertura ≥80%. RED → GREEN → REFACTOR
-- **error-handling** — Patrones robustos: errores tipados, retry, circuit breaker
-- **strategic-compact** — Compactación de contexto en fases largas
-
-### Calidad y testing
-- **e2e-testing** — Playwright: POM, CI/CD, flaky tests
-- **lint-format** — ESLint + Prettier + Biome. Pre-commit hooks
-- **plankton-code-quality** — Calidad en tiempo de escritura via hooks
-- **verification-loop** — Build → types → lint → tests → security → diff
-- **eval-harness** — Eval-driven development (EDD)
-- **ai-regression-testing** — Detección de blind spots en IA
-
-### Bases de datos
-- **postgres-patterns** — PostgreSQL: queries, esquemas, indexing, seguridad
-- **prisma-patterns** — Prisma ORM: schema, queries, transacciones
-- **mysql-patterns** — MySQL/MariaDB: schema, queries, replicación
-- **jpa-patterns** — JPA/Hibernate: entities, relationships, Spring Boot
-- **database-migrations** — Migraciones multi-motor con rollbacks
-- **clickhouse-io** — ClickHouse: analytics, data engineering
-
-### Infraestructura
-- **docker-patterns** — Multi-stage builds, Docker Compose, no-root
-
-### Diseño y frontend
-- **impeccable** — Skill de diseño completo. 23+ comandos (craft, critique, polish, animate...). OKLCH, WCAG AA, sin slop
-- **design-taste-frontend** — Anti-slop frontend. 3 diales: VARIANCE / MOTION / DENSITY
-- **emil-design-eng** — Filosofía de Emil Kowalski (ex-Vercel). Easing, springs, clip-path
-- **review-animations** — Revisión estricta de motion. 10 estándares no negociables
-- **animation-vocabulary** — Glosario inverso de términos de animación
-
-### Arquitectura y planificación
-- **council** — 4 voces para decisiones ambiguas y trade-offs
-- **code-tour** — Walkthroughs con anclas a archivos y líneas
-- **production-audit** — Auditoría de readiness para producción
-
-### Meta-habilidades
-- **agent-sort** — Clasifica skills en DAILY vs LIBRARY
-- **agent-introspection-debugging** — Debugging estructurado de fallos del agente
-- **skill-scout** — Busca skills existentes antes de crear uno nuevo
-- **skill-stocktake** — Auditoría de skills instalados
-- **hookify-rules** — Reglas para hooks de opencode
-- **iterative-retrieval** — Refinamiento de contexto para subagentes
-- **configure-ecc** — Instalación interactiva de skills ECC
-- **continuous-learning-v2** — Aprendizaje por instintos con nivel de confianza
-
-### Plataforma
-- **windows-desktop-e2e** — E2E para apps Windows nativas (pywinauto)
-
-## Comandos personalizados
-
-- `/graph-brain` — Indexa el proyecto en el grafo de conocimiento y muestra estadísticas
-
-## Servidores MCP
-
-### codebase-memory-mcp
-
-Grafo de conocimiento del código vía AST. 14 herramientas: `search_graph`, `trace_path`, `get_code_snippet`, `query_graph`, `get_architecture`.
-
-```bash
-# Instalar
-curl -L https://github.com/anomalyco/codebase-memory-mcp/releases/latest/download/codebase-memory-mcp-$(uname -s)-$(uname -m).tar.gz | tar xz
-mv codebase-memory-mcp ~/.local/bin/
-```
-
-UI disponible en `http://localhost:9749`.
-
-## Personalización
-
-1. Edita `config/INSTRUCTIONS.md` para cambiar la metodología
-2. Edita `config/opencode.jsonc` para rutas de skills o permisos
-3. Corre `ecc configure` para re-generar config con nuevos valores
-4. Agrega/quita skills del directorio `skills/` antes de ejecutar `install.sh`
-
-## Migración desde versión anterior
-
-Si ya tenías una instalación previa:
-
-```bash
-# El instalador crea backups automáticos
-./install.sh
-
-# Verificar que todo está bien
-ecc doctor
-
-# Los backups están en:
-#   ~/.config/opencode.bak.<timestamp>/
-#   ~/.opencode/skills.bak.<timestamp>/
+# Actualizar el repositorio a la última versión
+ecc update
 ```
 
 ---
 
-© anthra123x
+## 🔄 Flujo de Trabajo y Ciclo Cross-Sesión
+
+### Ejemplo de Vida Real en el Mismo Proyecto:
+
+#### 🌅 Sesión 1 (Lunes):
+1. Abres OpenCode en tu proyecto: `opencode`
+2. El título de tu pestaña cambia a `⚡ ᴏᴘᴇɴᴄᴏᴅᴇ [ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ] — ecommerce`.
+3. `@orchestrator` te saluda con el banner estilizado e inicializa el contexto del proyecto.
+4. Solicitas: *"Necesitamos implementar el catálogo de productos con base de datos y carrito animado"*.
+5. `@orchestrator` desglosa el trabajo en tareas en el tablero MCP.
+6. `@backend` reclama la tarea, aplica `tdd-workflow` y `postgres-patterns`, genera los endpoints y almacena el contrato `catalog-api-v1`.
+7. `@backend` hace el handoff formal a `@frontend`:
+   ```python
+   team_handoff(from_agent="backend", to_agent="frontend", task_id=1, notes="API lista al 89% de cobertura. Contrato en 'catalog-api-v1'.")
+   ```
+8. Cierras tu terminal y terminas tu jornada.
+
+#### 🌄 Sesión 2 (Martes - Reanudación Automática):
+1. Abres OpenCode nuevamente en la misma carpeta: `opencode`
+2. `@orchestrator` ejecuta `get_session_bootstrap()` y te recibe:
+   > *"⚡ Bienvenido de nuevo a **ecommerce**. En la sesión anterior, `@backend` completó la Tarea #1 y realizó el handoff con el artefacto `catalog-api-v1`. `@frontend` tiene la Tarea #2 lista para comenzar. ¿Deseas que `@frontend` inicie?"*
+3. `@frontend` lee el artefacto `catalog-api-v1` directamente del MCP, implementa los componentes con micro-interacciones sin pedirte que repitas ningún endpoint.
+4. `@qa-auditor` ejecuta el loop de verificación en 6 etapas.
+5. `@git-flow` prepara el commit semántico (`feat(catalog): ...`) listo para push.
+
+---
+
+## 🧪 Simulación de Sesión y Verificación
+
+El repositorio incluye una suite de pruebas y simulación integral para validar el funcionamiento de todos los componentes antes de usarlos en proyectos reales:
+
+```bash
+# Ejecutar la simulación completa de 7 turnos (Skills + MCPs + UI)
+python3 scripts/test_swarm_session.py
+
+# Ejecutar las pruebas unitarias de los servidores MCP
+python3 mcp/context-memory/test_server.py
+python3 mcp/team-collab/test_server.py
+```
+
+Salida esperada de la simulación:
+```text
+╔══════════════════════════════════════════════════════════════╗
+║       ⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫ — SESSION SIMULATION     ║
+║       Project: ecommerce-core           Branch: feature/catalog-v1 ║
+╚══════════════════════════════════════════════════════════════╝
+
+  ✓ Turno 1: Hidratación de contexto y bootstrap cross-sesión
+  ✓ Turno 2: Configuración del tablero de tareas del enjambre
+  ✓ Turno 3: @backend (TDD, PostgreSQL, Prisma, contrato y handoff)
+  ✓ Turno 4: @frontend (Consumo de contrato, OKLCH, física de resortes)
+  ✓ Turno 5: @qa-auditor (Loop de 6 etapas y sign-off de calidad)
+  ✓ Turno 6: @git-flow (Conventional Commits 1.0 y resumen de PR)
+  ✓ Turno 7: @orchestrator (Persistencia duradera y dashboard final)
+
+✨ SIMULATION COMPLETED SUCCESSFULLY! All sub-agents, MCPs, and skills verified.
+```
+
+---
+
+## 📂 Estructura del Repositorio
+
+```text
+opencode_config/
+├── ecc                           # CLI de gestión del Swarm (~/.local/bin/ecc)
+├── install.sh                    # Instalador interactivo con TUI y soporte fallback
+├── README.md                     # Documentación principal del proyecto
+├── agents/                       # Definiciones de los 6 sub-agentes especializados
+│   ├── orchestrator.md           # @orchestrator (Morado #8B5CF6)
+│   ├── backend.md                # @backend (Azul #3B82F6)
+│   ├── frontend.md               # @frontend (Rosa #EC4899)
+│   ├── git-flow.md               # @git-flow (Verde #10B981)
+│   ├── qa-auditor.md             # @qa-auditor (Ámbar #F59E0B)
+│   └── devops.md                 # @devops (Cian #06B6D4)
+├── mcp/                          # Servidores MCP nativos (Python 3 + SQLite FTS5)
+│   ├── context-memory/           # Memoria persistente de contexto
+│   │   ├── server.py
+│   │   └── test_server.py
+│   └── team-collab/              # Bus de coordinación y tablero multi-agente
+│       ├── server.py
+│       └── test_server.py
+├── config/                       # Archivos maestros de configuración OpenCode
+│   ├── opencode.jsonc            # Declaración de agentes, permisos y compresión
+│   ├── opencode.json             # Registro de servidores MCP
+│   ├── tui.json                  # Tema visual TokyoNight y diffs apilados
+│   ├── INSTRUCTIONS.md           # Metodología de ingeniería de software Swarm
+│   ├── AGENTS.md                 # Protocolos operacionales de agentes y memoria
+│   ├── plugins/
+│   │   └── team-hud.ts           # Plugin de OpenCode para títulos y banner HUD
+│   └── commands/                 # Slash commands (/team, /memory, /tasks, etc.)
+├── skills/                       # Catálogo de 35 skills especializados
+│   ├── git-flow-pro/             # Conventional Commits 1.0 y gestión de ramas
+│   ├── postgres-patterns/        # Patrones avanzados de PostgreSQL
+│   ├── prisma-patterns/          # Optimización de esquemas Prisma
+│   ├── impeccable/               # Pulido de componentes frontend
+│   ├── emil-design-eng/          # Animaciones y física de resortes
+│   ├── verification-loop/        # Loop riguroso de pruebas y compilación
+│   └── ...
+├── templates/
+│   └── opencode-wrapper.sh       # Wrapper ejecutable con branding tipográfico
+├── scripts/
+│   ├── configure.sh              # Asistente de configuración de componentes
+│   ├── test_swarm_session.py     # Suite de simulación de 7 turnos
+│   └── uninstall.sh              # Desinstalador limpio con respaldo
+└── lib/                          # Funciones auxiliares de Bash (ui, paths, utils)
+```
+
+---
+
+## 📋 Requisitos del Sistema
+
+- **Sistema Operativo**: Linux (Ubuntu, Debian, Fedora, Arch, etc.) o macOS.
+- **Python**: $\ge$ 3.10 con soporte estándar de `sqlite3` (incluido por defecto).
+- **Bash**: $\ge$ 4.0.
+- **OpenCode**: Versión $\ge$ 1.18 instalado en el sistema.
+- **Git**: $\ge$ 2.25.
+- **whiptail** *(opcional)*: Para ventanas visuales durante la instalación (con fallback automático a texto plano).
+
+---
+
+<div align="center">
+
+**⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫**
+Hecho con precisión técnica para equipos y desarrolladores de alto rendimiento.
+
+</div>

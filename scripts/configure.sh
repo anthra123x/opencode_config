@@ -24,9 +24,9 @@ setup_utils
 
 print_banner
 msgbox "Configuration Wizard" \
-"This wizard lets you reconfigure your opencode setup.
+"This wizard lets you reconfigure your OpenCode Swarm setup.
 
-You can change preferences and re-generate config files.
+You can change preferences, paths, and re-generate configuration files.
 Existing files will be backed up automatically."
 
 # ─── User info ───
@@ -38,15 +38,51 @@ CONFIG_PATH=$(inputbox "Config path" "Config directory:" "$CONFIG_DIR")
 SKILLS_PATH=$(inputbox "Skills path" "Skills directory:" "$SKILLS_DIR")
 
 # ─── Generate opencode.jsonc ───
-if yesno "Generate config" "Regenerate opencode.jsonc with current settings?"; then
+if yesno "Generate config" "Regenerate opencode.jsonc with Swarm settings?"; then
   cat > "$CONFIG_PATH/opencode.jsonc" <<EOF
 {
   "\$schema": "https://opencode.ai/config.json",
-  "instructions": ["INSTRUCTIONS.md", "AGENTS.md"],
+  "default_agent": "orchestrator",
+  "instructions": [
+    "INSTRUCTIONS.md",
+    "AGENTS.md"
+  ],
   "skills": {
     "paths": [
       "$SKILLS_PATH"
     ]
+  },
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "color": "#8B5CF6",
+      "description": "Team Lead & Orchestrator. Analyzes user requirements, plans architecture, delegates tasks to specialists (@backend, @frontend, @git-flow, @qa-auditor), and synthesizes deliverables."
+    },
+    "backend": {
+      "mode": "subagent",
+      "color": "#3B82F6",
+      "description": "Specialized Backend Engineer. Builds robust APIs, database schemas and migrations (PostgreSQL, Prisma, MySQL, JPA), business logic, and backend unit tests."
+    },
+    "frontend": {
+      "mode": "subagent",
+      "color": "#EC4899",
+      "description": "Specialized Frontend & UI/UX Engineer. Builds modern responsive web interfaces with curated typography, micro-animations, accessible components, and anti-slop design."
+    },
+    "git-flow": {
+      "mode": "subagent",
+      "color": "#10B981",
+      "description": "Specialized Git and GitHub Workflow Manager. Manages branch lifecycles, conventional semantic commits, PR reviews and summaries, merge conflict resolution, and release hygiene."
+    },
+    "qa-auditor": {
+      "mode": "subagent",
+      "color": "#F59E0B",
+      "description": "Specialized Quality Assurance & Verification Auditor. Audits test suites, ensures coverage >=80%, conducts security and production-readiness checks, and detects AI regressions."
+    },
+    "devops": {
+      "mode": "subagent",
+      "color": "#06B6D4",
+      "description": "Specialized DevOps and Infrastructure Engineer. Crafts lean multi-stage Dockerfiles, Docker Compose setups, non-root configurations, and CI/CD pipelines."
+    }
   },
   "permission": {
     "skill": {
@@ -59,14 +95,14 @@ if yesno "Generate config" "Regenerate opencode.jsonc with current settings?"; t
   }
 }
 EOF
-  log "Generated opencode.jsonc"
+  log "Regenerated opencode.jsonc"
 fi
 
 # ─── Summary ───
 echo ""
-echo -e "${C_GREEN}${C_BOLD}Configuration updated:${C_NC}"
-echo "  User:  $USER_NAME"
-echo "  Config: $CONFIG_PATH"
-echo "  Skills: $SKILLS_PATH"
+echo -e "${C_GREEN}${C_BOLD}Configuration updated successfully:${C_NC}"
+echo "  User:    $USER_NAME $([[ -n "$GITHUB_HANDLE" ]] && echo "($GITHUB_HANDLE)")"
+echo "  Config:  $CONFIG_PATH"
+echo "  Skills:  $SKILLS_PATH"
 echo ""
 echo -e "Run ${C_BOLD}ecc doctor${C_NC} to verify everything is working."

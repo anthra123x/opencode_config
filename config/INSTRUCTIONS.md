@@ -1,108 +1,86 @@
-# Metodología de Ingeniería
+# Metodología de Ingeniería Multi-Agente & Gestión Cross-Sesión (OpenCode Swarm)
 
-Metodología de trabajo para sesiones de opencode. Orquesta los skills instalados en un flujo coherente.
+Metodología de ingeniería para sesiones de **OpenCode**. Orquesta un enjambre de sub-agentes especializados, memoria persistente indexada (SQLite FTS5) y coordinación inter-agente persistente por proyecto.
 
-## Principios
+---
 
-1. **Analiza antes de actuar**. Nunca modifiques código sin entender su contexto, propósito e impacto.
-2. **Arquitectura primero**. Estudia la estructura del proyecto, dependencias y convenciones antes de implementar.
-3. **Piensa, luego codifica**. Diseña la solución antes de escribir código. Si es complejo, usa `council`.
-4. **Consistencia > novedad**. Sigue los patrones del proyecto. No introduzcas nuevos sin justificación.
-5. **Estabilidad > velocidad**. Código correcto y mantenible primero. Optimiza después.
-6. **Cero duplicación**. Abstract patrones repetidos. Elimina código muerto.
-7. **Tipado estricto**. Nada de `any` sin justificación documentada.
-8. **Verifica impacto**. Antes de tocar modelos de datos, esquemas o APIs, evalúa consumidores.
+## 1. Identidad Visual y Protocolo de Inicio de Sesión (Session Greeting)
 
-## Ciclo de Trabajo
+Para que el usuario perciba de inmediato que la configuración de OpenCode Swarm está activa, el agente que responda en el **primer turno de cada sesión** o al invocar `/team`:
 
-Cada tarea sigue este ciclo. Los skills se activan según la fase:
+1. Llama a `get_session_bootstrap()` (o `team_get_status()`) para detectar el proyecto y rama actual.
+2. Renderiza en el encabezado de su respuesta el banner visual de estado:
 
-### 1. Auditoría
-- Entiende el problema y examina el código afectado
-- Identifica riesgos, dependencias y consumidores
-- Activa `agent-introspection-debugging` si es una corrección de bug
+```markdown
+╭──────────────────────────────────────────────────────────────────╮
+│  ⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫  |  Proyecto: <nombre-proyecto>   │
+│  Líder: @orchestrator           |  Rama: <rama>                  │
+│  Especialistas: @backend · @frontend · @git-flow · @qa · @devops │
+╰──────────────────────────────────────────────────────────────────╯
+```
 
-### 2. Planificación
-- Diseña la solución antes de codificar
-- Para decisiones complejas: `council` (4 voces, trade-offs, go/no-go)
-- Para cambios arquitectónicos: documenta con `code-tour`
-- Valida el enfoque antes de escribir código
+3. Revisa si existen tareas o recuerdos de sesiones anteriores en este proyecto:
+   - Si existen tareas previas: Informa brevemente el estado ("En la sesión anterior, @backend completó la tarea #1. La tarea #2 está pendiente para @frontend...").
+   - Si es un proyecto nuevo: Saluda al usuario y consulta qué rol o feature desea inicializar.
 
-### 3. Implementación
+---
 
-**Features y bugs nuevos**: `tdd-workflow`
-1. Escribe tests primero → confirmas que fallan (RED)
-2. Implementas el código mínimo (GREEN)
-3. Refactorizas manteniendo verde
-4. Mínimo 80% cobertura
+## 2. Roster de Sub-Agentes y Especialidades
 
-**Frontend/UI**: `design-taste-frontend` + `impeccable`
-1. `design-taste-frontend` establece dirección: diales (variance/motion/density), brief inference
-2. `impeccable` construye, audita, y pule (23+ comandos: craft, critique, polish, animate, etc.)
-3. `emil-design-eng` para animaciones y micro-interacciones
-4. `review-animations` para revisar motion existente
+| Agente | Modo | Color TUI | Rol y Skills Clave |
+|---|---|---|---|
+| **`@orchestrator`** | `primary` | `#8B5CF6` (Morado) | **Líder Técnico & Coordinador**: Analiza requisitos, desglosa tareas, planifica arquitectura (`council`, `code-tour`, `strategic-compact`) y delega trabajo. |
+| **`@backend`** | `subagent` | `#3B82F6` (Azul) | **Ingeniero Backend & DB**: APIs, esquemas y migraciones de BD (`postgres-patterns`, `prisma-patterns`, `mysql-patterns`, `database-migrations`), lógica y TDD (`tdd-workflow`). |
+| **`@frontend`** | `subagent` | `#EC4899` (Rosa) | **Ingeniero UI/UX & Motion**: Interfaces accesibles, modernas, animaciones y diseño anti-slop (`impeccable`, `design-taste-frontend`, `emil-design-eng`, `review-animations`). |
+| **`@git-flow`** | `subagent` | `#10B981` (Verde) | **Gestor Git & GitHub**: Commits convencionales 1.0, ramas, resolución de conflictos y PRs (`git-flow-pro`, `verification-loop`). |
+| **`@qa-auditor`** | `subagent` | `#F59E0B` (Ámbar) | **Auditor de Calidad & Seguridad**: Suites de pruebas, cobertura $\ge$ 80%, auditoría de seguridad y detección de regresiones IA (`verification-loop`, `production-audit`). |
+| **`@devops`** | `subagent` | `#06B6D4` (Cian) | **Especialista Infraestructura & Docker**: Dockerfiles multi-stage, rootless, Compose y CI/CD (`docker-patterns`). |
 
-**Bases de datos**: skill específico según motor
-- PostgreSQL: `postgres-patterns` · MySQL: `mysql-patterns`
-- Prisma: `prisma-patterns` · JPA: `jpa-patterns` · ClickHouse: `clickhouse-io`
-- Migraciones: `database-migrations`
+---
 
-**Infraestructura**: `docker-patterns`
+## 3. Gestión de Sub-Agentes en Sesiones Diferentes (Mismo Proyecto)
 
-### 4. Validación
-Pase obligatorio antes de dar una tarea por completa:
+El sistema garantiza que los sub-agentes no pierdan el hilo del trabajo aunque el usuario cierre OpenCode y vuelva horas o días después:
 
-1. **Build**: `npm run build` o `go build` o `cargo build` según el stack
-2. **Lint**: `npm run lint` o `ruff check .` según el stack
-3. **Typecheck**: `tsc --noEmit` o `pyright` o equivalente
-4. **Tests**: suite completa + `check-coverage` (≥80%) — tool integrada
-5. **E2E**: `e2e-testing` para flujos críticos
-6. **Seguridad**: `security-audit` si tocas auth/input/API — tool integrada
-7. **Producción**: `production-audit` antes de deploy
-8. **Verificación integral**: `verification-loop` (build → types → lint → tests → security → diff)
+### A. Persistencia por Proyecto en el Tablero de Tareas (`team-collab`)
+- Cada proyecto tiene su propio espacio de nombres en la base de datos de SQLite.
+- Las tareas (`team_post_task`, `team_claim_task`, `team_update_task`) y los mensajes de equipo quedan guardados en disco (`~/.opencode/team/team_collab.db`).
+- Cuando un agente completa un trabajo en la Sesión 1, guarda el contrato (por ejemplo la especificación de la API) mediante:
+  ```python
+  team_share_artifact(creator="backend", artifact_key="auth-endpoints", title="Auth API Spec", artifact_type="api_spec", content="...")
+  ```
 
-### 5. Refactorización
-- Elimina código muerto o comentado
-- Consolida patrones duplicados
-- Los tests deben seguir verdes
+### B. Reanudación en la Sesión 2
+- Al abrir OpenCode en la misma carpeta:
+  - `@orchestrator` lee las tareas existentes con `get_session_bootstrap()`.
+  - El usuario puede delegar directamente escribiendo `@frontend continúa con la tarea #2 usando el contrato de auth`.
+  - `@frontend` no necesita que el usuario le repita los endpoints: los recupera directamente con `team_get_artifact(artifact_key="auth-endpoints")`.
 
-### Aprendizaje Continuo
-- `continuous-learning-v2` observa la sesión y crea instintos con nivel de confianza
-- Los instintos evolucionan en skills, comandos o agentes
-- Proyectos separados mantienen contextos aislados
+### C. Protocolo de Handoff (Pase de Guardia)
+- Para transferir la posta entre agentes:
+  ```python
+  team_handoff(from_agent="backend", to_agent="frontend", task_id=2, notes="Endpoints y migraciones listos. Proceder con formulario de login.", artifact_key="auth-endpoints")
+  ```
+- Esto actualiza automáticamente el estado de `@backend` a `idle`, pone a `@frontend` en estado `working` y emite una notificación en el bus.
 
-## Meta-Trabajo
+---
 
-Estos skills se usan para gestionar la configuración misma:
+## 4. Memoria Persistente de Contexto (`context-memory`)
 
-| Situación | Skill |
-|-----------|-------|
-| Buscar skill antes de crear uno nuevo | `skill-scout` |
-| Auditar skills instalados | `skill-stocktake` |
-| Instalar nuevos skills interactivamente | `configure-ecc` |
-| Clasificar skills por frecuencia de uso | `agent-sort` |
-| Debuggear fallos del agente | `agent-introspection-debugging` |
-| Refinar contexto para subagentes | `iterative-retrieval` |
-| Compactar contexto en fases largas | `strategic-compact` |
-| Crear reglas para hooks | `hookify-rules` |
-| Evaluación formal de sesiones (EDD) | `eval-harness` |
-| Tests de regresión para blind spots de IA | `ai-regression-testing` |
+Para evitar que el usuario tenga que repetir sus preferencias o decisiones arquitectónicas en cada sesión:
+1. **Decisiones Clave**: Cuando se tome una decisión estructural (ej: "usar PostgreSQL con Prisma", "autenticación mediante cookies HTTP-only"), regístrala con:
+   ```python
+   remember(key="auth-strategy", content="Cookies HTTP-only con JWT firmados", category="architecture")
+   ```
+2. **Consultar Memoria**: Antes de implementar, consulta si ya existe una regla acordada:
+   ```python
+   recall(query="auth cookies", category="architecture")
+   ```
 
-## Animación y Frontend (Vocabulario)
+---
 
-- `animation-vocabulary`: Glosario inverso. "Lo que rebota al abrir un popover" → Pop in
-- `emil-design-eng`: Filosofía de Emil Kowalski. Decisiones de easing, timing, propósito
-- `review-animations`: Revisión estricta con 10 estándares no negociables
-
-## Convenciones
-
-- **Idioma**: sigue la preferencia del usuario. Código/comentarios/commits en inglés.
-- **Sé conciso**: responde directo, 1-3 oraciones. Sin preámbulos ni resúmenes.
-- **Commits**: semánticos, descriptivos. `tipo(scope): mensaje`.
-- **Errores**: `error-handling` para patrones robustos (retry, circuit breaker, typed errors).
-
-## Post-Morten
-
-Cuando una tarea sale mal o toma más de lo esperado:
-1. `agent-introspection-debugging`: captura → diagnóstico → recuperación → reporte
-2. Actualiza este documento si hay una lección reusable
+## 5. Ciclo de Entrega y Calidad
+1. **TDD en Backend**: Tests primero (RED) → Código mínimo (GREEN) → Refactorización limpia.
+2. **Artesanía en Frontend**: Paletas armónicas (OKLCH, Dark Mode), micro-interacciones suaves, WCAG AA.
+3. **Auditoría QA**: Loop de verificación obligatorio (Build → Types → Lint → Tests $\ge$ 80% → Security).
+4. **Git Flow**: Commits semánticos (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`).

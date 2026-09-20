@@ -1,0 +1,8 @@
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight",
+  "diff_style": "stacked",
+  "scroll_speed": 2,
+  "scroll_acceleration": true,
+  "mouse": true
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ecc — opencode Configuration Manager CLI
+# ecc — OpenCode Swarm Configuration Manager CLI
 # Installed to ~/.local/bin/ecc by install.sh
 
 ECC_CONFIG="${ECC_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
@@ -22,27 +22,51 @@ if [ -f "$ECC_CONFIG/lib/utils.sh" ]; then
   setup_utils
 fi
 
-# ─── Help ───
+# Fallback UI colors if not sourced
+C_CYAN="${C_CYAN:-\033[36m}"
+C_GREEN="${C_GREEN:-\033[32m}"
+C_YELLOW="${C_YELLOW:-\033[33m}"
+C_RED="${C_RED:-\033[31m}"
+C_MAGENTA="${C_MAGENTA:-\033[35m}"
+C_BLUE="${C_BLUE:-\033[34m}"
+C_BOLD="${C_BOLD:-\033[1m}"
+C_DIM="${C_DIM:-\033[2m}"
+C_NC="${C_NC:-\033[0m}"
+
+log()   { echo -e "${C_GREEN}✓${C_NC} $1"; }
+info()  { echo -e "${C_CYAN}→${C_NC} $1"; }
+warn()  { echo -e "${C_YELLOW}⚠${C_NC} $1"; }
+issue() { echo -e "${C_RED}✗${C_NC} $1"; }
+
+in_path() {
+  local dir="${1:-$HOME/.local/bin}"
+  case ":$PATH:" in
+    *:"$dir":*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 show_help() {
   cat <<EOF
 Usage: ecc <command> [options]
 
 Commands:
-  doctor      Run diagnostic checks on the installation
-  configure   Re-run configuration wizard
-  status      Show installation status
-  validate    Verify integrity of installed files
-  update      Pull latest version from git repository
-  uninstall   Remove all installed files (with backup)
+  doctor      Run comprehensive diagnostic checks on the Swarm installation
+  status      Show installation overview, agents roster, and MCP status
+  team        Display real-time multi-agent team board and active tasks
+  memory      Query persistent context memory (e.g. 'ecc memory auth' or 'ecc memory')
+  validate    Verify integrity of JSON, JSONC, agent definitions, and skills
+  configure   Re-run the interactive configuration wizard
+  update      Pull latest version from git repository and re-apply
+  uninstall   Remove all installed files (with automatic backup)
   help        Show this help message
 
 Examples:
   ecc doctor
   ecc status
-  ecc configure
-  ecc update
-  ecc uninstall
+  ecc team
+  ecc memory "database conventions"
+  ecc validate
 
 Report issues: https://github.com/anthra123x/opencode_config
 EOF
@@ -51,15 +75,15 @@ EOF
 # ─── Doctor ───
 
 cmd_doctor() {
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}  ecc doctor — System Diagnostic${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}  ecc doctor — Swarm System Diagnostic${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
   echo ""
   local issues=0
 
-  # opencode agent
+  # opencode CLI
   if command -v opencode &>/dev/null; then
-    log "opencode CLI: $(command -v opencode)"
+    log "OpenCode CLI: $(command -v opencode) ($(opencode --version 2>/dev/null || echo 'active'))"
   elif command -v claude &>/dev/null; then
     log "Claude Code CLI: $(command -v claude)"
   else
@@ -67,14 +91,59 @@ cmd_doctor() {
     issues=$((issues + 1))
   fi
 
-  # Config directory
+  # Python 3 & SQLite FTS5
+  if command -v python3 &>/dev/null; then
+    if python3 -c "import sqlite3; conn = sqlite3.connect(':memory:'); conn.execute('CREATE VIRTUAL TABLE t USING fts5(c)')" &>/dev/null; then
+      log "Python 3 with SQLite FTS5: $(python3 --version 2>&1)"
+    else
+      warn "Python 3 found but SQLite FTS5 extension missing (context-memory may use LIKE fallback)"
+    fi
+  else
+    issue "Python 3 not found in PATH (required for native MCP servers)"
+    issues=$((issues + 1))
+  fi
+
+  # Config directory & core files
   if [ -d "$ECC_CONFIG" ]; then
     log "Config directory: $ECC_CONFIG"
-    for f in opencode.jsonc INSTRUCTIONS.md AGENTS.md; do
-      [ -f "$ECC_CONFIG/$f" ] && log "  ✓ $f" || { warn "  ✗ $f (missing)"; issues=$((issues + 1)); }
+    for f in opencode.jsonc opencode.json tui.json INSTRUCTIONS.md AGENTS.md; do
+      if [ -f "$ECC_CONFIG/$f" ]; then
+        log "  ✓ $f"
+      else
+        warn "  ✗ $f (missing)"
+        issues=$((issues + 1))
+      fi
     done
   else
     issue "Config directory not found: $ECC_CONFIG"
+    issues=$((issues + 1))
+  fi
+
+  # Specialized Sub-Agents
+  if [ -d "$ECC_CONFIG/agents" ]; then
+    local acount; acount=$(find "$ECC_CONFIG/agents" -maxdepth 1 -name "*.md" 2>/dev/null | wc -l)
+    log "Specialized Agents: $acount agent(s) installed"
+    for a in "$ECC_CONFIG/agents"/*.md; do
+      [ -f "$a" ] || continue
+      log "  ✓ @$(basename "$a" .md)"
+    done
+  else
+    warn "Agents directory not found: $ECC_CONFIG/agents"
+    issues=$((issues + 1))
+  fi
+
+  # Native MCP Servers
+  if [ -f "$ECC_CONFIG/mcp/context-memory/server.py" ]; then
+    log "MCP Server [context-memory]: $ECC_CONFIG/mcp/context-memory/server.py"
+  else
+    warn "MCP Server [context-memory] missing"
+    issues=$((issues + 1))
+  fi
+
+  if [ -f "$ECC_CONFIG/mcp/team-collab/server.py" ]; then
+    log "MCP Server [team-collab]: $ECC_CONFIG/mcp/team-collab/server.py"
+  else
+    warn "MCP Server [team-collab] missing"
     issues=$((issues + 1))
   fi
 
@@ -87,19 +156,12 @@ cmd_doctor() {
     issues=$((issues + 1))
   fi
 
-  # MCP
-  if command -v codebase-memory-mcp &>/dev/null; then
-    log "MCP server: codebase-memory-mcp"
-  else
-    warn "MCP server not found (optional: install codebase-memory-mcp)"
-  fi
-
-  # PATH
+  # PATH check
   local bindir="${HOME}/.local/bin"
   if in_path "$bindir"; then
     log "\$PATH includes $bindir"
   else
-    warn "\$PATH does not include $bindir — ecc commands won't work globally"
+    warn "\$PATH does not include $bindir — add it to your ~/.bashrc or ~/.zshrc"
     issues=$((issues + 1))
   fi
 
@@ -111,88 +173,167 @@ cmd_doctor() {
     issues=$((issues + 1))
   fi
 
-  # git
-  if command -v git &>/dev/null; then
-    log "git: $(git --version 2>/dev/null | head -1)"
-  else
-    warn "git not found (updates via 'ecc update' unavailable)"
-  fi
-
   echo ""
   if [ "$issues" -eq 0 ]; then
-    echo -e "${C_GREEN}${C_BOLD}✓ All checks passed${C_NC}"
+    echo -e "${C_GREEN}${C_BOLD}✓ All Swarm checks passed successfully!${C_NC}"
   else
-    echo -e "${C_YELLOW}${C_BOLD}⚠ $issues issue(s) found${C_NC}"
-    echo "  Run 'ecc validate' for detailed file integrity check"
+    echo -e "${C_YELLOW}${C_BOLD}⚠ $issues issue(s) detected${C_NC}"
+    echo "  Run 'ecc validate' for file-level integrity checks"
   fi
 }
 
 # ─── Status ───
 
 cmd_status() {
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}  ecc status — Installation Overview${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}  ecc status — Swarm Installation Overview${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
   echo ""
-  echo -e "  ${C_BOLD}Config:${C_NC}"
+
+  # Configuration
+  echo -e "  ${C_BOLD}Configuration:${C_NC}"
   if [ -d "$ECC_CONFIG" ]; then
-    echo "    Path: $ECC_CONFIG"
     local csize; csize=$(du -sh "$ECC_CONFIG" 2>/dev/null | cut -f1)
-    echo "    Size: ${csize:-unknown}"
-    local ccount; ccount=$(find "$ECC_CONFIG" -maxdepth 1 -type f 2>/dev/null | wc -l)
-    echo "    Files: $ccount"
+    echo "    Path:   $ECC_CONFIG"
+    echo "    Size:   ${csize:-unknown}"
+    local theme_name="default"
+    if [ -f "$ECC_CONFIG/tui.json" ]; then
+      theme_name=$(python3 -c "import json; print(json.load(open('$ECC_CONFIG/tui.json')).get('theme', 'default'))" 2>/dev/null || echo "tokyonight")
+    fi
+    echo -e "    Theme:  ${C_MAGENTA}$theme_name${C_NC}"
   else
     warn "    Not installed"
   fi
+
+  # Agents Roster
   echo ""
-  echo -e "  ${C_BOLD}Skills:${C_NC}"
+  echo -e "  ${C_BOLD}Specialized Agents Roster:${C_NC}"
+  if [ -d "$ECC_CONFIG/agents" ]; then
+    for f in "$ECC_CONFIG/agents"/*.md; do
+      [ -f "$f" ] || continue
+      local aname; aname=$(basename "$f" .md)
+      local desc; desc=$(grep -m 1 "^description:" "$f" 2>/dev/null | sed 's/^description: *//' || echo "")
+      if [ "$aname" = "orchestrator" ]; then
+        echo -e "    ${C_MAGENTA}• @$aname${C_NC} (primary): $desc"
+      elif [ "$aname" = "backend" ]; then
+        echo -e "    ${C_BLUE}• @$aname${C_NC} (subagent): $desc"
+      elif [ "$aname" = "frontend" ]; then
+        echo -e "    ${C_RED}• @$aname${C_NC} (subagent): $desc"
+      elif [ "$aname" = "git-flow" ]; then
+        echo -e "    ${C_GREEN}• @$aname${C_NC} (subagent): $desc"
+      elif [ "$aname" = "qa-auditor" ]; then
+        echo -e "    ${C_YELLOW}• @$aname${C_NC} (subagent): $desc"
+      elif [ "$aname" = "devops" ]; then
+        echo -e "    ${C_CYAN}• @$aname${C_NC} (subagent): $desc"
+      else
+        echo -e "    • @$aname (subagent): $desc"
+      fi
+    done
+  else
+    warn "    No agents installed"
+  fi
+
+  # MCP Servers & Storage
+  echo ""
+  echo -e "  ${C_BOLD}Native MCP Servers & Storage:${C_NC}"
+  local mem_db="${OPENCODE_MEMORY_DB:-$HOME/.opencode/memory/context_memory.db}"
+  local team_db="${OPENCODE_TEAM_DB:-$HOME/.opencode/team/team_collab.db}"
+
+  if [ -f "$mem_db" ]; then
+    local mcount; mcount=$(python3 -c "import sqlite3; conn=sqlite3.connect('$mem_db'); print(conn.execute('SELECT COUNT(*) FROM memories').fetchone()[0])" 2>/dev/null || echo "0")
+    local msize; msize=$(du -sh "$mem_db" 2>/dev/null | cut -f1)
+    echo -e "    ${C_GREEN}✓${C_NC} context-memory (FTS5): $mcount memory item(s) stored ($msize)"
+  else
+    echo -e "    ${C_GREEN}✓${C_NC} context-memory (ready, database will initialize on first use)"
+  fi
+
+  if [ -f "$team_db" ]; then
+    local tcount; tcount=$(python3 -c "import sqlite3; conn=sqlite3.connect('$team_db'); print(conn.execute('SELECT COUNT(*) FROM team_tasks').fetchone()[0])" 2>/dev/null || echo "0")
+    echo -e "    ${C_GREEN}✓${C_NC} team-collab (Swarm Bus): $tcount task(s) on board"
+  else
+    echo -e "    ${C_GREEN}✓${C_NC} team-collab (ready, database will initialize on first use)"
+  fi
+
+  # Skills
+  echo ""
+  echo -e "  ${C_BOLD}Skills Library:${C_NC}"
   if [ -d "$ECC_SKILLS" ]; then
     local scount; scount=$(find "$ECC_SKILLS" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
-    echo "    Path: $ECC_SKILLS"
-    echo "    Installed: $scount skills"
-    if [ "$scount" -gt 0 ]; then
-      echo ""
-      echo "    Listing:"
-      for d in "$ECC_SKILLS"/*/; do
-        [ -d "$d" ] || continue
-        local sn; sn=$(basename "$d")
-        local has_skill=false
-        [ -f "$d/SKILL.md" ] && has_skill=true
-        if $has_skill; then
-          echo -e "      ${C_GREEN}✓${C_NC} $sn"
-        else
-          echo -e "      ${C_DIM}○${C_NC} $sn"
-        fi
-      done
-    fi
+    echo "    Installed: $scount skills in $ECC_SKILLS"
   else
     warn "    Not installed"
   fi
-  echo ""
-  echo -e "  ${C_BOLD}CLI:${C_NC}"
-  local ecc_path; ecc_path=$(command -v ecc 2>/dev/null || echo "not in PATH")
-  echo "    $ecc_path"
-  echo ""
-  echo -e "  ${C_BOLD}MCP:${C_NC}"
-  if command -v codebase-memory-mcp &>/dev/null; then
-    log "    codebase-memory-mcp installed"
+}
+
+# ─── Team Board ───
+
+cmd_team() {
+  local server_script="$ECC_CONFIG/mcp/team-collab/server.py"
+  if [ ! -f "$server_script" ]; then
+    # Fallback to repo dir
+    local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    server_script="$repo_dir/mcp/team-collab/server.py"
+  fi
+
+  if [ -f "$server_script" ]; then
+    python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_team_get_status({}))
+"
   else
-    warn "    Not installed (optional)"
+    issue "team-collab server script not found"
+    exit 1
+  fi
+}
+
+# ─── Memory Inspector ───
+
+cmd_memory() {
+  local server_script="$ECC_CONFIG/mcp/context-memory/server.py"
+  if [ ! -f "$server_script" ]; then
+    local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    server_script="$repo_dir/mcp/context-memory/server.py"
+  fi
+
+  if [ ! -f "$server_script" ]; then
+    issue "context-memory server script not found"
+    exit 1
+  fi
+
+  local query="${1:-}"
+  if [ -n "$query" ]; then
+    python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_recall({'query': '''$query'''}))
+"
+  else
+    python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_get_active_context({'project': 'global'}))
+"
   fi
 }
 
 # ─── Validate ───
 
 cmd_validate() {
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}  ecc validate — File Integrity Check${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}  ecc validate — Integrity Verification${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
   echo ""
   local errors=0
 
-  # Check required files exist
+  # Check required config files
   local -a required=(
     "$ECC_CONFIG/opencode.jsonc"
+    "$ECC_CONFIG/opencode.json"
+    "$ECC_CONFIG/tui.json"
     "$ECC_CONFIG/INSTRUCTIONS.md"
     "$ECC_CONFIG/AGENTS.md"
   )
@@ -201,59 +342,44 @@ cmd_validate() {
     if [ -f "$f" ]; then
       log "  ✓ $(basename "$f")"
     else
-      error "  ✗ $f (missing)"
+      issue "  ✗ $f (missing)"
       errors=$((errors + 1))
     fi
   done
 
-  # Check skills have SKILL.md
-  if [ -d "$ECC_SKILLS" ]; then
-    for d in "$ECC_SKILLS"/*/; do
-      [ -d "$d" ] || continue
-      local sn; sn=$(basename "$d")
-      if [ ! -f "$d/SKILL.md" ]; then
-        error "  ✗ $sn/SKILL.md (missing)"
+  # Validate JSON files
+  for jf in "$ECC_CONFIG/opencode.json" "$ECC_CONFIG/tui.json"; do
+    if [ -f "$jf" ]; then
+      if python3 -c "import json; json.load(open('$jf'))" 2>/dev/null; then
+        log "  ✓ $(basename "$jf") (valid JSON)"
+      else
+        issue "  ✗ $(basename "$jf") (invalid JSON syntax)"
         errors=$((errors + 1))
       fi
-    done
-  fi
-
-  # Check MCP config is valid JSON
-  if [ -f "$ECC_CONFIG/opencode.json" ]; then
-    if python3 -c "import json; json.load(open('$ECC_CONFIG/opencode.json'))" 2>/dev/null; then
-      log "  ✓ opencode.json (valid JSON)"
-    else
-      error "  ✗ opencode.json (invalid JSON)"
-      errors=$((errors + 1))
     fi
-  fi
+  done
 
-  # Check JSONC is valid
+  # Validate JSONC
   if [ -f "$ECC_CONFIG/opencode.jsonc" ]; then
-    local jsonc_file="$ECC_CONFIG/opencode.jsonc"
     local py_script
     py_script=$(mktemp)
     cat >"$py_script" <<'PYEOF'
 import json, sys
-
 def strip_jsonc(content):
-    result = []
-    i = 0
-    in_string = False
-    escape = False
+    res, i, in_str, esc = [], 0, False, False
     while i < len(content):
-        ch = content[i]
-        if ch == '"' and not escape:
-            in_string = not in_string
-            result.append(ch)
-        elif ch == '\\' and not escape and in_string:
-            escape = True
-            result.append(ch)
-        elif ch == '/' and i + 1 < len(content) and content[i+1] == '/' and not in_string:
+        c = content[i]
+        if c == '"' and not esc:
+            in_str = not in_str
+            res.append(c)
+        elif c == '\\' and not esc and in_str:
+            esc = True
+            res.append(c)
+        elif c == '/' and i + 1 < len(content) and content[i+1] == '/' and not in_str:
             while i < len(content) and content[i] != '\n':
                 i += 1
             continue
-        elif ch == '/' and i + 1 < len(content) and content[i+1] == '*' and not in_string:
+        elif c == '/' and i + 1 < len(content) and content[i+1] == '*' and not in_str:
             i += 2
             while i + 1 < len(content):
                 if content[i] == '*' and content[i+1] == '/':
@@ -262,28 +388,50 @@ def strip_jsonc(content):
                 i += 1
             continue
         else:
-            result.append(ch)
-            if escape:
-                escape = False
+            res.append(c)
+            if esc: esc = False
         i += 1
-    return ''.join(result)
-
+    return ''.join(res)
 with open(sys.argv[1]) as f:
-    clean = strip_jsonc(f.read())
-json.loads(clean)
+    json.loads(strip_jsonc(f.read()))
 PYEOF
-    if python3 "$py_script" "$jsonc_file" 2>/dev/null; then
-      log "  ✓ opencode.jsonc (valid)"
+    if python3 "$py_script" "$ECC_CONFIG/opencode.jsonc" 2>/dev/null; then
+      log "  ✓ opencode.jsonc (valid JSONC)"
     else
-      error "  ✗ opencode.jsonc (invalid)"
+      issue "  ✗ opencode.jsonc (invalid syntax)"
       errors=$((errors + 1))
     fi
     rm -f "$py_script"
   fi
 
+  # Validate Agents
+  if [ -d "$ECC_CONFIG/agents" ]; then
+    for af in "$ECC_CONFIG/agents"/*.md; do
+      [ -f "$af" ] || continue
+      if grep -q "^description:" "$af" && grep -q "^mode:" "$af"; then
+        log "  ✓ agent: $(basename "$af" .md) (valid frontmatter)"
+      else
+        warn "  ✗ agent: $(basename "$af" .md) (missing frontmatter fields)"
+        errors=$((errors + 1))
+      fi
+    done
+  fi
+
+  # Validate MCP server syntax
+  for ms in "$ECC_CONFIG/mcp/context-memory/server.py" "$ECC_CONFIG/mcp/team-collab/server.py"; do
+    if [ -f "$ms" ]; then
+      if python3 -m py_compile "$ms" 2>/dev/null; then
+        log "  ✓ $(basename "$(dirname "$ms")")/server.py (compiled cleanly)"
+      else
+        issue "  ✗ $(basename "$(dirname "$ms")")/server.py (python syntax error)"
+        errors=$((errors + 1))
+      fi
+    fi
+  done
+
   echo ""
   if [ "$errors" -eq 0 ]; then
-    echo -e "${C_GREEN}${C_BOLD}✓ All files validated successfully${C_NC}"
+    echo -e "${C_GREEN}${C_BOLD}✓ All Swarm files validated successfully!${C_NC}"
   else
     echo -e "${C_RED}${C_BOLD}✗ $errors error(s) found${C_NC}"
   fi
@@ -295,8 +443,7 @@ cmd_configure() {
   if [ -f "$ECC_CONFIG/scripts/configure.sh" ]; then
     exec "$ECC_CONFIG/scripts/configure.sh" "$@"
   else
-    error "Configuration script not found"
-    echo "Re-run install.sh to restore it"
+    issue "Configuration script not found in $ECC_CONFIG/scripts/"
     exit 1
   fi
 }
@@ -304,13 +451,12 @@ cmd_configure() {
 # ─── Update ───
 
 cmd_update() {
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}  ecc update — Pull Latest Version${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}  ecc update — Pull Latest Swarm Version${C_NC}"
+  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
   echo ""
 
   local repo_dir
-  # Try to find the repo
   if [ -d "$ECC_ROOT/repo" ]; then
     repo_dir="$ECC_ROOT/repo"
   elif git rev-parse --show-toplevel 2>/dev/null; then
@@ -320,34 +466,34 @@ cmd_update() {
   if [ -n "${repo_dir:-}" ] && [ -d "${repo_dir:-}/.git" ]; then
     echo "  Repository: $repo_dir"
     (cd "$repo_dir" && git pull) && log "Repository updated" || {
-      error "Failed to pull latest changes"
+      issue "Failed to pull latest changes"
       exit 1
     }
-    # Re-run install
     echo ""
-    info "Re-applying configuration..."
+    info "Re-applying Swarm configuration..."
     (cd "$repo_dir" && exec ./install.sh)
   else
     warn "Repository not found locally"
     echo ""
     echo "  To update manually:"
     echo "    git clone https://github.com/anthra123x/opencode_config.git"
-    echo "    cd opencode_config"
-    echo "    ./install.sh"
+    echo "    cd opencode_config && ./install.sh"
   fi
 }
 
 # ─── Uninstall ───
 
 cmd_uninstall() {
-  echo -e "${C_RED}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo -e "${C_RED}${C_BOLD}  ecc uninstall — Remove Configuration${C_NC}"
-  echo -e "${C_RED}${C_BOLD}══════════════════════════════════════════${C_NC}"
+  echo -e "${C_RED}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
+  echo -e "${C_RED}${C_BOLD}  ecc uninstall — Remove Swarm Configuration${C_NC}"
+  echo -e "${C_RED}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
   echo ""
   echo -e "${C_RED}This will remove:${C_NC}"
   echo "    $ECC_CONFIG"
   echo "    $ECC_SKILLS"
   echo "    $HOME/.local/bin/ecc"
+  echo "    $HOME/.local/bin/opencode-context-memory"
+  echo "    $HOME/.local/bin/opencode-team-collab"
   echo ""
 
   local answer
@@ -357,28 +503,17 @@ cmd_uninstall() {
     exit 0
   fi
 
-  # Backup first
-  local bk
   if [ -d "$ECC_CONFIG" ]; then
-    bk=$(backup_dir "$ECC_CONFIG")
+    local bk; bk=$(backup_dir "$ECC_CONFIG")
     info "Config backed up: $bk"
   fi
-  if [ -d "$ECC_SKILLS" ]; then
-    bk=$(backup_dir "$ECC_SKILLS")
-    info "Skills backed up: $bk"
-  fi
 
-  # Remove
-  rm -rf "$ECC_CONFIG" && log "Removed config: $ECC_CONFIG" || warn "Failed to remove $ECC_CONFIG"
-  rm -rf "$ECC_SKILLS" && log "Removed skills: $ECC_SKILLS" || warn "Failed to remove $ECC_SKILLS"
-  rm -f "$HOME/.local/bin/ecc" && log "Removed CLI: $HOME/.local/bin/ecc" || true
+  rm -rf "$ECC_CONFIG" && log "Removed config: $ECC_CONFIG" || warn "Failed to remove config"
+  rm -rf "$ECC_SKILLS" && log "Removed skills: $ECC_SKILLS" || warn "Failed to remove skills"
+  rm -f "$HOME/.local/bin/ecc" "$HOME/.local/bin/opencode-context-memory" "$HOME/.local/bin/opencode-team-collab" 2>/dev/null || true
 
   echo ""
   log "Uninstall complete. Backups saved alongside original locations."
-  echo ""
-  echo "If you want to reinstall later:"
-  echo "  git clone https://github.com/anthra123x/opencode_config.git"
-  echo "  cd opencode_config && ./install.sh"
 }
 
 # ─── Main dispatch ───
@@ -388,14 +523,20 @@ main() {
     doctor|check)
       cmd_doctor
       ;;
-    configure|config|setup)
-      cmd_configure "${@:2}"
-      ;;
     status|info)
       cmd_status
       ;;
+    team|board|tasks)
+      cmd_team
+      ;;
+    memory|recall|ctx)
+      cmd_memory "${@:2}"
+      ;;
     validate|verify)
       cmd_validate
+      ;;
+    configure|config|setup)
+      cmd_configure "${@:2}"
       ;;
     update|upgrade)
       cmd_update

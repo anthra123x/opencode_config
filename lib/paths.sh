@@ -1,4 +1,4 @@
-# paths.sh — Path resolution for opencode config
+# paths.sh — Path resolution and environment detection for opencode config
 # Source this file, don't execute it: source lib/paths.sh
 
 setup_paths() {
@@ -6,6 +6,9 @@ setup_paths() {
 
   OPENCODE_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
   OPENCODE_SKILLS="${OPENCODE_SKILLS:-$HOME/.opencode/skills}"
+  OPENCODE_AGENTS="${OPENCODE_CONFIG}/agents"
+  OPENCODE_COMMANDS="${OPENCODE_CONFIG}/commands"
+  OPENCODE_MCP="${OPENCODE_CONFIG}/mcp"
   OPENCODE_DATA="${XDG_DATA_HOME:-$HOME/.local/share}/opencode"
   LOCAL_BIN="${HOME}/.local/bin"
 
@@ -19,6 +22,23 @@ detect_opencode() {
   elif command -v claude &>/dev/null; then
     OPENCODE_BIN=$(command -v claude)
     return 0
+  fi
+  return 1
+}
+
+detect_python() {
+  if command -v python3 &>/dev/null; then
+    PYTHON_BIN=$(command -v python3)
+    return 0
+  fi
+  return 1
+}
+
+detect_sqlite_fts5() {
+  if command -v python3 &>/dev/null; then
+    if python3 -c "import sqlite3; conn = sqlite3.connect(':memory:'); conn.execute('CREATE VIRTUAL TABLE t USING fts5(c)')" &>/dev/null; then
+      return 0
+    fi
   fi
   return 1
 }

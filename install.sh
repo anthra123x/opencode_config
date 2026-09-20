@@ -14,20 +14,24 @@ setup_utils
 
 print_banner
 msgbox "Welcome" \
-"Welcome to the opencode Configuration Manager!
+"Welcome to the opencode Multi-Agent Swarm Configuration Manager!
 
 This installer will set up:
 
-  • 33 ECC skills for engineering, testing, DB, design, infra
-  • Engineering methodology (INSTRUCTIONS.md)
-  • Knowledge graph agent rules (AGENTS.md)
-  • MCP server integration
+  • 6 Specialized Sub-Agents (@orchestrator, @backend, @frontend, @git-flow, @qa-auditor, @devops)
+  • 2 Native MCP Servers:
+      - context-memory (Persistent context with SQLite FTS5)
+      - team-collab (Inter-agent communication & task board)
+  • 34 ECC skills for engineering, testing, DB, design, infra
+  • Engineering methodology & Swarm Lifecycle (INSTRUCTIONS.md)
+  • Multi-agent rules & memory protocols (AGENTS.md)
+  • Aesthetic TUI Theme & Custom Slash Commands (/team, /memory, etc.)
 
 Two modes available:
-  - Quickstart: minimal prompts, best for AI-assisted setup
+  - Quickstart: minimal prompts, recommended
   - Manual: full control over every option
 
-Total install size: ~500KB  |  Time: 30-90 seconds"
+Total install size: ~1MB  |  Time: 30-60 seconds"
 
 # ──────────────── STEP: Prerequisites ────────────────
 
@@ -59,18 +63,23 @@ else
   warn "Install opencode: see https://opencode.ai"
 fi
 
+# Check python3 and SQLite FTS5
+if detect_python; then
+  if detect_sqlite_fts5; then
+    log "Found Python 3 with SQLite FTS5 support: $(python3 --version)"
+  else
+    warn "Python 3 found but SQLite FTS5 extension missing (context-memory may use LIKE fallback)"
+  fi
+else
+  warn "python3 not found — required for native MCP servers"
+  PREREQ_FAIL=true
+fi
+
 # Check git
 if command -v git &>/dev/null; then
   log "Found git: $(git --version | head -1)"
 else
   warn "git not found — updates via 'ecc update' disabled"
-fi
-
-# Check MCP
-if detect_mcp; then
-  log "Found codebase-memory-mcp at $MCP_BIN"
-else
-  info "codebase-memory-mcp not detected — install separately"
 fi
 
 echo ""
@@ -80,6 +89,7 @@ if $PREREQ_FAIL; then
 "Some prerequisites are missing. Please fix them and re-run:
 
   • bash >= 4
+  • python3 (with sqlite3)
 
 After installing, run ./install.sh again."
   exit 1
@@ -91,10 +101,10 @@ MODE=""
 if yesno "Installation Mode" \
 "Do you want Quickstart mode?
 
-  [Yes] = Quickstart — minimal prompts, optimized for AI-assisted use
-  [No]  = Manual — full control over every option"; then
+  [Yes] = Quickstart — install full Swarm suite (agents, MCPs, skills, TUI)
+  [No]  = Manual — select components and custom paths"; then
   MODE="quickstart"
-  infobox "Mode" "Quickstart selected — you'll be asked minimal questions"
+  infobox "Mode" "Quickstart selected — installing full Swarm suite"
 else
   MODE="manual"
   infobox "Mode" "Manual selected — full configuration wizard"
@@ -102,27 +112,26 @@ fi
 
 # ──────────────── STEP: Configuration ────────────────
 
-# Always ask for these
 USER_NAME=$(inputbox "User" "Enter your name or alias (for config headers):" "${USER:-user}")
 GITHUB_HANDLE=$(inputbox "GitHub" "Enter your GitHub username (optional):" "")
 
-# Component selection (always install core + skills)
 if [[ "$MODE" == "manual" ]]; then
   CHOICES=$(
     checklist "Components" \
-"Select components to install:" 18 65 8 \
-  "CONFIG"  "Core configuration files" ON \
-  "SKILLS"  "All 33 ECC skills" ON \
-  "MCP"     "MCP server config (codebase-memory)" ON \
-  "COMMANDS" "Custom commands (/graph-brain)" ON \
-  "LIBS"    "Shared libraries (lib/)" ON
+"Select components to install:" 20 68 8 \
+  "CONFIG"   "Core configuration (JSONC, instructions, rules)" ON \
+  "AGENTS"   "6 Specialized Sub-Agents (orchestrator, etc.)" ON \
+  "MCP"      "Native MCP servers (context-memory & team-collab)" ON \
+  "SKILLS"   "All 34 ECC engineering skills" ON \
+  "COMMANDS" "Custom commands (/team, /memory, /backend, etc.)" ON \
+  "TUI"      "Aesthetic TUI theme (tokyonight) & layout" ON \
+  "PLUGINS"  "OpenCode plugins (team-hud)" ON \
+  "LIBS"     "Shared libraries & CLI tools" ON
   )
 else
-  # Quickstart: install everything
-  CHOICES="CONFIG SKILLS MCP COMMANDS LIBS"
+  CHOICES="CONFIG AGENTS MCP SKILLS COMMANDS TUI PLUGINS LIBS"
 fi
 
-# Custom paths (manual only)
 if [[ "$MODE" == "manual" ]]; then
   CONFIG_DIR=$(inputbox "Config path" "opencode config directory:" "$OPENCODE_CONFIG")
   SKILLS_DIR=$(inputbox "Skills path" "Skills directory:" "$OPENCODE_SKILLS")
@@ -134,13 +143,10 @@ fi
 # ──────────────── STEP: Install ────────────────
 
 SKILL_COUNT=$(count_dirs "$REPO_DIR/skills" 1)
-INSTALL_STEPS=0
-echo "$CHOICES" | grep -q "CONFIG"   && INSTALL_STEPS=$((INSTALL_STEPS + 4))
-echo "$CHOICES" | grep -q "SKILLS"   && INSTALL_STEPS=$((INSTALL_STEPS + SKILL_COUNT + 1))
-echo "$CHOICES" | grep -q "MCP"      && INSTALL_STEPS=$((INSTALL_STEPS + 1))
-echo "$CHOICES" | grep -q "COMMANDS" && INSTALL_STEPS=$((INSTALL_STEPS + 1))
-echo "$CHOICES" | grep -q "LIBS"     && INSTALL_STEPS=$((INSTALL_STEPS + 3))
+AGENT_COUNT=$(count_dirs "$REPO_DIR/agents" 1)
+[ "$AGENT_COUNT" -eq 0 ] && AGENT_COUNT=$(find "$REPO_DIR/agents" -name "*.md" 2>/dev/null | wc -l)
 
+INSTALL_STEPS=12
 CURRENT_STEP=0
 do_step() {
   CURRENT_STEP=$((CURRENT_STEP + 1))
@@ -155,111 +161,121 @@ do_step() {
   fi
 }
 
-# Start progress gauge
-if [[ "$UI_WHIPTAIL" == "true" ]]; then
-  exec 3>&1
-  exec 1>/dev/null
-  (
-    # Gauge loop
-    local pct=0
-    while read -r line; do
-      if [[ "$line" =~ ^[0-9]+$ ]]; then
-        pct=$line
-      fi
-    done
-  ) | whiptail --title "Installing" --gauge "" 8 60 0 &
-  GAUGE_PID=$!
-  exec 4>&1
-fi
-
-report_progress() {
-  local pct=$1
-  if [[ "$UI_WHIPTAIL" == "true" ]]; then
-    echo "$pct"
-  fi
-}
-
-# Create directories
+# Create base directories
 infobox "Preparing" "Creating directories..."
+mkdir -p "$CONFIG_DIR/agents"
 mkdir -p "$CONFIG_DIR/commands"
+mkdir -p "$CONFIG_DIR/plugins"
+mkdir -p "$CONFIG_DIR/mcp"
 mkdir -p "$SKILLS_DIR"
 mkdir -p "$LOCAL_BIN"
 
-# Backup existing
+# Backup existing config
 if [ -d "$CONFIG_DIR" ]; then
   bk=$(backup_dir "$CONFIG_DIR")
   info "Backup created: $bk"
 fi
 
-# Install config
+# 1. Install Core Config
 if echo "$CHOICES" | grep -q "CONFIG"; then
   do_step "Installing core configuration..."
   cp "$REPO_DIR/config/opencode.jsonc" "$CONFIG_DIR/opencode.jsonc"
-  do_step "Installing MCP config..."
   cp "$REPO_DIR/config/opencode.json" "$CONFIG_DIR/opencode.json"
-  do_step "Installing methodology..."
   cp "$REPO_DIR/config/INSTRUCTIONS.md" "$CONFIG_DIR/INSTRUCTIONS.md"
-  do_step "Installing agent rules..."
   cp "$REPO_DIR/config/AGENTS.md" "$CONFIG_DIR/AGENTS.md"
-  log "Config installed to $CONFIG_DIR"
+  log "Core configuration installed to $CONFIG_DIR"
 fi
 
-# Install skills
+# 2. Install TUI Theme
+if echo "$CHOICES" | grep -q "TUI" && [ -f "$REPO_DIR/config/tui.json" ]; then
+  do_step "Installing aesthetic TUI configuration..."
+  cp "$REPO_DIR/config/tui.json" "$CONFIG_DIR/tui.json"
+  log "TUI configuration (tokyonight) installed"
+fi
+
+# 3. Install Specialized Agents
+if echo "$CHOICES" | grep -q "AGENTS" && [ -d "$REPO_DIR/agents" ]; then
+  do_step "Installing specialized sub-agents..."
+  mkdir -p "$CONFIG_DIR/agents"
+  cp "$REPO_DIR/agents/"*.md "$CONFIG_DIR/agents/" 2>/dev/null || true
+  log "Specialized sub-agents installed to $CONFIG_DIR/agents/"
+fi
+
+# 4. Install Native MCP Servers
+if echo "$CHOICES" | grep -q "MCP" && [ -d "$REPO_DIR/mcp" ]; then
+  do_step "Installing native MCP servers..."
+  mkdir -p "$CONFIG_DIR/mcp/context-memory"
+  mkdir -p "$CONFIG_DIR/mcp/team-collab"
+  cp -r "$REPO_DIR/mcp/context-memory/"* "$CONFIG_DIR/mcp/context-memory/"
+  cp -r "$REPO_DIR/mcp/team-collab/"* "$CONFIG_DIR/mcp/team-collab/"
+  chmod +x "$CONFIG_DIR/mcp/context-memory/server.py" "$CONFIG_DIR/mcp/team-collab/server.py"
+
+  # Create executable wrappers in ~/.local/bin
+  cat > "$LOCAL_BIN/opencode-context-memory" <<EOF
+#!/usr/bin/env bash
+exec python3 "$CONFIG_DIR/mcp/context-memory/server.py" "\$@"
+EOF
+  chmod +x "$LOCAL_BIN/opencode-context-memory"
+
+  cat > "$LOCAL_BIN/opencode-team-collab" <<EOF
+#!/usr/bin/env bash
+exec python3 "$CONFIG_DIR/mcp/team-collab/server.py" "\$@"
+EOF
+  chmod +x "$LOCAL_BIN/opencode-team-collab"
+
+  log "Native MCP servers installed (context-memory & team-collab)"
+fi
+
+# 5. Install Skills
 if echo "$CHOICES" | grep -q "SKILLS" && [ -d "$REPO_DIR/skills" ]; then
-  SKILL_COUNT=$(count_dirs "$REPO_DIR/skills" 1)
-  if [ "$SKILL_COUNT" -gt 0 ]; then
-    do_step "Preparing skills directory..."
-    mkdir -p "$SKILLS_DIR"
-    local i=0
-    for skill_dir in "$REPO_DIR/skills"/*/; do
-      [ -d "$skill_dir" ] || continue
-      skill_name=$(basename "$skill_dir")
-      i=$((i + 1))
-      do_step "Installing skill $i/$SKILL_COUNT: $skill_name"
-      target="$SKILLS_DIR/$skill_name"
-      mkdir -p "$target"
-      cp -r "$skill_dir"/* "$target/"
-    done
-    find "$SKILLS_DIR" \( -name "*.sh" -o -name "*.mjs" -o -name "*.py" \) -exec chmod +x {} + 2>/dev/null || true
-    log "$SKILL_COUNT skills installed to $SKILLS_DIR"
-  fi
+  do_step "Installing ECC engineering skills..."
+  mkdir -p "$SKILLS_DIR"
+  for skill_dir in "$REPO_DIR/skills"/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name=$(basename "$skill_dir")
+    target="$SKILLS_DIR/$skill_name"
+    mkdir -p "$target"
+    cp -r "$skill_dir"/* "$target/"
+  done
+  find "$SKILLS_DIR" \( -name "*.sh" -o -name "*.mjs" -o -name "*.py" \) -exec chmod +x {} + 2>/dev/null || true
+  log "$SKILL_COUNT skills installed to $SKILLS_DIR"
 fi
 
-# Install MCP config
-if echo "$CHOICES" | grep -q "MCP"; then
-  do_step "Configuring MCP servers..."
-  cp "$REPO_DIR/config/opencode.json" "$CONFIG_DIR/opencode.json" 2>/dev/null || true
-  log "MCP config installed"
-fi
-
-# Install commands
+# 6. Install Commands
 if echo "$CHOICES" | grep -q "COMMANDS"; then
-  do_step "Installing custom commands..."
+  do_step "Installing custom slash commands..."
+  mkdir -p "$CONFIG_DIR/commands"
   if ls "$REPO_DIR/config/commands/"*.md &>/dev/null; then
     cp "$REPO_DIR/config/commands/"*.md "$CONFIG_DIR/commands/"
   fi
-  log "Commands installed"
+  log "Commands installed (/team, /memory, /backend, /frontend, /git-flow, /qa)"
 fi
 
-# Install libraries
+# 7. Install Plugins
+if echo "$CHOICES" | grep -q "PLUGINS" && [ -d "$REPO_DIR/config/plugins" ]; then
+  do_step "Installing OpenCode plugins..."
+  mkdir -p "$CONFIG_DIR/plugins"
+  cp -r "$REPO_DIR/config/plugins/"* "$CONFIG_DIR/plugins/" 2>/dev/null || true
+  log "Plugins installed to $CONFIG_DIR/plugins/"
+fi
+
+# 8. Install Libraries
 if echo "$CHOICES" | grep -q "LIBS"; then
-  do_step "Installing UI library..."
+  do_step "Installing shared libraries..."
   mkdir -p "$CONFIG_DIR/lib"
   cp "$REPO_DIR/lib/ui.sh" "$CONFIG_DIR/lib/ui.sh"
-  do_step "Installing paths library..."
   cp "$REPO_DIR/lib/paths.sh" "$CONFIG_DIR/lib/paths.sh"
-  do_step "Installing utils library..."
   cp "$REPO_DIR/lib/utils.sh" "$CONFIG_DIR/lib/utils.sh"
   log "Libraries installed to $CONFIG_DIR/lib/"
 fi
 
-# Install ecc CLI
+# 9. Install ecc CLI
 do_step "Installing ecc CLI..."
 cp "$REPO_DIR/ecc" "$LOCAL_BIN/ecc"
 chmod +x "$LOCAL_BIN/ecc"
 log "ecc CLI installed to $LOCAL_BIN/ecc"
 
-# Copy scripts
+# 10. Copy scripts & templates
 do_step "Installing management scripts..."
 mkdir -p "$CONFIG_DIR/scripts"
 for script in configure.sh uninstall.sh; do
@@ -269,7 +285,6 @@ for script in configure.sh uninstall.sh; do
   fi
 done
 
-# Copy templates
 if [ -d "$REPO_DIR/templates" ]; then
   mkdir -p "$CONFIG_DIR/templates"
   cp -r "$REPO_DIR/templates/"* "$CONFIG_DIR/templates/" 2>/dev/null || true
@@ -277,86 +292,54 @@ fi
 
 # ──────────────── STEP: Post-install ────────────────
 
-# PATH warning
 PATH_WARN=""
 if ! in_path "$LOCAL_BIN"; then
   PATH_WARN="\n  • Add $LOCAL_BIN to your PATH:\n    export PATH=\"\$PATH:$LOCAL_BIN\""
-  # Suggest adding to shell rc
   warn "$LOCAL_BIN not in PATH"
 fi
 
-# MCP status
-if detect_mcp; then
-  MCP_STATUS="${C_GREEN}✓${C_NC} codebase-memory-mcp"
-else
-  MCP_STATUS="${C_YELLOW}⚠${C_NC} codebase-memory-mcp (install manually)"
-fi
-
-# ──────────────── STEP: Summary ────────────────
-
-do_step "Finalizing..."
-
 SUMMARY="Installation complete!
 
-  Config: $CONFIG_DIR
-  Skills: $SKILLS_DIR ($SKILL_COUNT)
-  CLI:    $LOCAL_BIN/ecc
-  MCP:    $MCP_STATUS
-  Agent:  $AGENT_BIN
-  $([[ -n "$GITHUB_HANDLE" ]] && echo "  User:   $USER_NAME ($GITHUB_HANDLE)" || echo "  User:   $USER_NAME")
+  Config:  $CONFIG_DIR
+  Agents:  6 specialized sub-agents installed
+  MCP:     context-memory (FTS5) & team-collab active
+  TUI:     tokyonight theme enabled
+  Skills:  $SKILLS_DIR ($SKILL_COUNT skills)
+  CLI:     $LOCAL_BIN/ecc
+  User:    $USER_NAME $([[ -n "$GITHUB_HANDLE" ]] && echo "($GITHUB_HANDLE)")
 $([[ -n "$PATH_WARN" ]] && echo "$PATH_WARN")
 
 Next steps:
-  • Run 'ecc doctor' to verify the installation
-  • Run 'ecc status' to see what's installed
-  • Read INSTRUCTIONS.md for the engineering methodology
-  • Tell your AI agent to read the instructions"
-
-if [[ "$UI_WHIPTAIL" == "true" ]]; then
-  exec 1>&3 3>&-
-  kill "$GAUGE_PID" 2>/dev/null || true
-  print_banner
-fi
+  • Run 'ecc doctor' to verify all components
+  • Run 'ecc status' to inspect agents and MCP servers
+  • Run 'ecc team' to view the development board
+  • Launch opencode to enter the multi-agent swarm"
 
 echo ""
 msgbox "Summary" "$SUMMARY"
 
-# ──────────────── STEP: Next steps ────────────────
-
 echo ""
-if [[ "$MODE" == "quickstart" ]]; then
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}  ✨ Ready for AI-assisted setup${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo ""
-  echo "  Your configuration is ready!"
-  echo ""
-  if [[ -n "$AGENT_BIN" ]]; then
-    echo "  Start a session:"
-    echo "    ${C_BOLD}$AGENT_BIN${C_NC}"
-    echo ""
-    echo "  The agent will automatically load the instructions"
-    echo "  and methodology from the installed config."
-  fi
-else
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}  Manual setup complete${C_NC}"
-  echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════${C_NC}"
-  echo ""
-  echo "  All components installed per your selections."
-fi
-
+echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
+echo -e "${C_CYAN}${C_BOLD}  🛡️  OpenCode Swarm Configuration Ready${C_NC}"
+echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
 echo ""
-echo -e "${C_BOLD}Available commands:${C_NC}"
-echo -e "  ${C_GREEN}ecc doctor${C_NC}     — Diagnostic check"
-echo -e "  ${C_GREEN}ecc status${C_NC}    — Installation status"
-echo -e "  ${C_GREEN}ecc configure${C_NC} — Re-run configuration"
-echo -e "  ${C_GREEN}ecc validate${C_NC}  — Verify integrity"
-echo -e "  ${C_GREEN}ecc uninstall${C_NC} — Remove configuration"
-echo -e "  ${C_GREEN}ecc update${C_NC}    — Pull latest version"
+echo -e "  ${C_BOLD}Specialized Agents:${C_NC}"
+echo -e "    ${C_MAGENTA}• @orchestrator${C_NC}  — Team Lead & Architecture Planner"
+echo -e "    ${C_BLUE}• @backend${C_NC}       — APIs, Databases & Server Logic"
+echo -e "    ${C_RED}• @frontend${C_NC}      — UI/UX, Motion & Modern Web Design"
+echo -e "    ${C_GREEN}• @git-flow${C_NC}      — Commits, Branching & Pull Requests"
+echo -e "    ${C_YELLOW}• @qa-auditor${C_NC}   — Verification Loop & Security Audits"
+echo -e "    ${C_CYAN}• @devops${C_NC}       — Docker, CI/CD & Deployments"
 echo ""
-
-if [[ -n "$PATH_WARN" ]]; then
-  echo -e "${C_YELLOW}$PATH_WARN${C_NC}"
-  echo ""
-fi
+echo -e "  ${C_BOLD}MCP Servers:${C_NC}"
+echo -e "    ${C_GREEN}✓${C_NC} context-memory (SQLite FTS5 persistent memory)"
+echo -e "    ${C_GREEN}✓${C_NC} team-collab    (Inter-agent Swarm Bus & task board)"
+echo ""
+echo -e "  ${C_BOLD}Available Commands in OpenCode:${C_NC}"
+echo -e "    ${C_GREEN}/team${C_NC}      — View team status and task board"
+echo -e "    ${C_GREEN}/memory${C_NC}    — Query and recall persistent context"
+echo -e "    ${C_GREEN}/backend${C_NC}   — Delegate to backend specialist"
+echo -e "    ${C_GREEN}/frontend${C_NC}  — Delegate to frontend specialist"
+echo -e "    ${C_GREEN}/git-flow${C_NC}  — Delegate to git workflow manager"
+echo -e "    ${C_GREEN}/qa${C_NC}        — Run verification loop & audits"
+echo ""
