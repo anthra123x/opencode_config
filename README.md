@@ -216,16 +216,17 @@ ecc update
 
 ## 🧠 Swarm Cockpit & GetBrain: Monitoreo en Tiempo Real y Grafo de Conocimiento
 
-OpenCode Swarm incluye un **servidor web local multi-hilo** (`web/server.py`) que **se inicia automáticamente en segundo plano cada vez que abres OpenCode**. 
+OpenCode Swarm incluye un **servidor web local multi-hilo** (`web/server.py`) que **se inicia de forma 100% automática y silenciosa en segundo plano cada vez que abres OpenCode** en tu terminal.
 
-Al iniciar OpenCode, la sección de **Tips** en tu terminal y en el saludo del equipo te indicará que el servidor está activo junto con los enlaces directos para abrirlo:
-```text
-  💡 Tip: Servidor de Monitoreo & GetBrain Activo
-  Monitorear flujo de trabajo:       http://localhost:4040
-  Visualizar grafo de conocimiento:  http://localhost:4040/#brain
-```
+### 💡 Integración Nativa en la Pantalla Central de OpenCode:
+Para evitar ventanas emergentes o textos fugaces que desaparecen antes de que puedas interactuar, los accesos al servidor están integrados **directamente dentro de la interfaz central de OpenCode**:
+1. **Recuadro de Tips en el Home (`home_bottom`)**: En el centro de la pantalla inicial de OpenCode, la sección de tips te ofrece de inmediato los enlaces activos resaltados con el color de tu tema:
+   - `💡 Monitorea el flujo de los agentes en http://localhost:4040`
+   - `🧠 Grafo de conocimiento GetBrain: http://localhost:4040/#brain`
+2. **Encabezado del Agente Activo**: En el selector central de agentes, la descripción de `@orchestrator` te recuerda el enlace directo para abrir el panel de control.
+3. **Comandos y Saludo de Sesión**: Al iniciar una sesión o usar `/team` o `/brain`, los agentes proporcionan los hipervínculos directos.
 
-También puedes abrirlo manualmente en cualquier momento ejecutando:
+Si deseas forzar la apertura del navegador desde tu terminal en cualquier momento:
 ```bash
 ecc web --open
 ```
@@ -233,12 +234,12 @@ ecc web --open
 ### Características de la Suite Web:
 1. **Swarm Cockpit (Pestaña 1 - `http://localhost:4040`)**:
    - **Roster en Tiempo Real**: Tarjetas visuales de los 6 especialistas (`@orchestrator`, `@backend`, `@frontend`, `@git-flow`, `@qa-auditor`, `@devops`) con indicadores de pulso verde en vivo, identificador de ventana de terminal (`term-1-backend`), tarea en curso y tiempo transcurrido.
-   - **Tablero Kanban de Flujo de Trabajo**: Vista sincronizada de tareas Por Hacer, En Curso, Revisión y Completadas con prioridades y notas.
+   - **Tablero Kanban de Flujo de Trabajo**: Vista sincronizada de tareas Por Hacer, En Curso, Revisión y Completadas con prioridades y notas. Interfaz limpia enfocada en supervisión en vivo.
    - **Feed de Actividad en Vivo**: Transmisión instantánea mediante **Server-Sent Events (SSE)** de todos los avisos y pases de guardia que ocurren en tus terminales de OpenCode.
    - **Contratos & Memorias**: Explorador de especificaciones de API, esquemas y decisiones de arquitectura guardadas en SQLite FTS5.
 
 2. **GetBrain Knowledge Graph (Pestaña 2 - `http://localhost:4040/#brain`)**:
-   - **Motor de Física 2D Interactivo**: Visualizador en Canvas con simulación de fuerzas, partículas de energía que fluyen por los enlaces activos y controles de zoom/paneo.
+   - **Motor de Física 2D Interactivo**: Visualizador en Canvas HTML5 con simulación de fuerzas gravitatorias y resortes, auto-ajuste de escala y partículas de energía que fluyen por los enlaces activos.
    - **Grafo Sintetizado Automáticamente**: Conecta Agentes, Tareas, Contratos publicados, Decisiones de memoria y Archivos de código del proyecto:
      $$\text{Agente} \xrightarrow{\text{trabaja en}} \text{Tarea} \xrightarrow{\text{impacta}} \text{Módulo}$$
      $$\text{Backend} \xrightarrow{\text{publicó}} \text{Contrato API} \xrightarrow{\text{consumido por}} \text{Frontend}$$
@@ -368,6 +369,13 @@ opencode_config/
 │   ├── emil-design-eng/          # Animaciones y física de resortes
 │   ├── verification-loop/        # Loop riguroso de pruebas y compilación
 │   └── ...
+├── web/                          # Servidor local multi-hilo y suite visual
+│   ├── server.py                 # Servidor HTTP con API REST y SSE en tiempo real
+│   ├── brain_builder.py          # Generador y sintetizador del grafo GetBrain
+│   └── public/                   # Frontend SPA TokyoNight (HTML5, Vanilla CSS, JS)
+│       ├── index.html            # Dashboard Swarm y visualizador GetBrain
+│       ├── style.css             # Glassmorphism, animaciones y tokens oscuros
+│       └── app.js                # Motor de física 2D en Canvas y cliente SSE
 ├── templates/
 │   └── opencode-wrapper.sh       # Wrapper ejecutable con branding tipográfico
 ├── scripts/
