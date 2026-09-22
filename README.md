@@ -145,6 +145,7 @@ Puedes ejecutar estos comandos directamente dentro de la interfaz de OpenCode:
 | Comando | Acción |
 |---|---|
 | `/live` | Monitor multi-ventana en tiempo real. Muestra qué ventana y tarea tiene cada especialista al instante. |
+| `/brain` | Enlaces de acceso directo y estado del Swarm Cockpit & GetBrain Web Dashboard. |
 | `/team` | Despliega el dashboard completo del enjambre, estado de los 6 agentes y el tablero de tareas. |
 | `/tasks` | Consulta el tablero interactivo de tareas del proyecto actual. |
 | `/memory [query]` | Realiza una búsqueda o muestra el contexto activo persistido en SQLite FTS5. |
@@ -173,7 +174,8 @@ El instalador interactivo (`install.sh`):
 4. Instala y valida los servidores MCP nativos en `~/.config/opencode/mcp/`.
 5. Configura `opencode.jsonc`, `opencode.json`, `tui.json`, `AGENTS.md` e `INSTRUCTIONS.md`.
 6. Enlaza los ejecutables de soporte (`ecc`, `opencode-context-memory`, `opencode-team-collab`) en `~/.local/bin/`.
-7. Instala el wrapper visual con la tipografía estilizada.
+7. Instala el servidor web local y GetBrain en `~/.config/opencode/web/`.
+8. Instala el wrapper visual con la tipografía estilizada.
 
 ---
 
@@ -185,7 +187,10 @@ El comando `ecc` queda instalado en tu `$PATH` (`~/.local/bin/ecc`) para control
 # Diagnóstico completo de componentes, agentes y servidores MCP
 ecc doctor
 
-# Monitor en tiempo real multi-ventana (auto-refresco cada 2 segundos)
+# Iniciar el servidor web local con el Swarm Cockpit y GetBrain (abre tu navegador)
+ecc web --open
+
+# Monitor en tiempo real multi-ventana en terminal (auto-refresco cada 2 segundos)
 ecc live --watch
 
 # Ver el tablero del equipo y tareas activas en el directorio actual
@@ -206,6 +211,39 @@ ecc configure
 # Actualizar el repositorio a la última versión
 ecc update
 ```
+
+---
+
+## 🧠 Swarm Cockpit & GetBrain: Monitoreo en Tiempo Real y Grafo de Conocimiento
+
+OpenCode Swarm incluye un **servidor web local multi-hilo** (`web/server.py`) que **se inicia automáticamente en segundo plano cada vez que abres OpenCode**. 
+
+Al iniciar OpenCode, la sección de **Tips** en tu terminal y en el saludo del equipo te indicará que el servidor está activo junto con los enlaces directos para abrirlo:
+```text
+  💡 Tip: Servidor de Monitoreo & GetBrain Activo
+  Monitorear flujo de trabajo:       http://localhost:4040
+  Visualizar grafo de conocimiento:  http://localhost:4040/#brain
+```
+
+También puedes abrirlo manualmente en cualquier momento ejecutando:
+```bash
+ecc web --open
+```
+
+### Características de la Suite Web:
+1. **Swarm Cockpit (Pestaña 1 - `http://localhost:4040`)**:
+   - **Roster en Tiempo Real**: Tarjetas visuales de los 6 especialistas (`@orchestrator`, `@backend`, `@frontend`, `@git-flow`, `@qa-auditor`, `@devops`) con indicadores de pulso verde en vivo, identificador de ventana de terminal (`term-1-backend`), tarea en curso y tiempo transcurrido.
+   - **Tablero Kanban de Flujo de Trabajo**: Vista sincronizada de tareas Por Hacer, En Curso, Revisión y Completadas con prioridades y notas.
+   - **Feed de Actividad en Vivo**: Transmisión instantánea mediante **Server-Sent Events (SSE)** de todos los avisos y pases de guardia que ocurren en tus terminales de OpenCode.
+   - **Contratos & Memorias**: Explorador de especificaciones de API, esquemas y decisiones de arquitectura guardadas en SQLite FTS5.
+
+2. **GetBrain Knowledge Graph (Pestaña 2 - `http://localhost:4040/#brain`)**:
+   - **Motor de Física 2D Interactivo**: Visualizador en Canvas con simulación de fuerzas, partículas de energía que fluyen por los enlaces activos y controles de zoom/paneo.
+   - **Grafo Sintetizado Automáticamente**: Conecta Agentes, Tareas, Contratos publicados, Decisiones de memoria y Archivos de código del proyecto:
+     $$\text{Agente} \xrightarrow{\text{trabaja en}} \text{Tarea} \xrightarrow{\text{impacta}} \text{Módulo}$$
+     $$\text{Backend} \xrightarrow{\text{publicó}} \text{Contrato API} \xrightarrow{\text{consumido por}} \text{Frontend}$$
+   - **Inspector Lateral de Nodos**: Haz clic en cualquier nodo para ver su especificación técnica, contenido completo, creador y conexiones vinculadas.
+   - **Filtros Dinámicos & Búsqueda**: Filtra por tipo de nodo (Agentes, Tareas, Contratos, Memorias, Código) o busca por nombre.
 
 ---
 

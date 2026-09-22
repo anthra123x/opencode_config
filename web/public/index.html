@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ OpenCode Swarm Cockpit & GetBrain</title>
+  <!-- Google Fonts: Inter, Outfit, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-tokyonight">
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-logo">
+        <span class="logo-icon">⚡</span>
+        <div class="brand-titles">
+          <span class="brand-name">ᴏᴘᴇɴᴄᴏᴅᴇ</span>
+          <span class="brand-sub">⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫</span>
+        </div>
+      </div>
+
+      <div class="project-pill" id="projectPill">
+        <span class="folder-icon">📁</span>
+        <span class="proj-name" id="projectName">Cargando...</span>
+        <span class="branch-tag" id="projectBranch">main</span>
+      </div>
+    </div>
+
+    <!-- View Switcher Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" id="tabCockpit" onclick="switchView('cockpit')">
+        <span class="tab-icon">🖥️</span>
+        <span>Swarm Cockpit</span>
+      </button>
+      <button class="nav-tab" id="tabBrain" onclick="switchView('brain')">
+        <span class="tab-icon">🧠</span>
+        <span>GetBrain Graph</span>
+        <span class="badge-counter" id="brainNodesCount">0</span>
+      </button>
+    </nav>
+
+    <!-- Header Actions & Live Status -->
+    <div class="header-right">
+      <div class="live-indicator">
+        <span class="pulse-dot"></span>
+        <span class="live-text" id="liveStatusText">LIVE SSE</span>
+        <span class="live-clock" id="liveClock">00:00:00</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="main-container">
+
+    <!-- VIEW 1: SWARM COCKPIT -->
+    <section id="viewCockpit" class="view-panel active">
+      
+      <!-- Sub-Agents Real-Time Roster -->
+      <div class="panel-section">
+        <div class="section-title-bar">
+          <div class="section-title">
+            <span class="icon">👥</span>
+            <h2>Sub-Agentes Especializados (Multi-Ventana)</h2>
+          </div>
+          <div class="section-badge" id="activeAgentsBadge">0 Agentes Activos</div>
+        </div>
+
+        <div class="agents-grid" id="agentsGrid">
+          <!-- Populated dynamically by app.js -->
+          <div class="agent-skeleton">Cargando enjambre...</div>
+        </div>
+      </div>
+
+      <!-- Mid-Section: Kanban & Live Feed -->
+      <div class="dashboard-split">
+        
+        <!-- Kanban Task Board -->
+        <div class="panel-card kanban-panel">
+          <div class="card-header">
+            <div class="card-title">
+              <span>📋</span>
+              <h3>Tablero de Tareas Cross-Sesión</h3>
+            </div>
+            <div class="filter-pills" id="kanbanFilters">
+              <span class="pill active" onclick="filterTasks('all')">Todas</span>
+              <span class="pill" onclick="filterTasks('in_progress')">En Curso</span>
+              <span class="pill" onclick="filterTasks('todo')">Pendientes</span>
+              <span class="pill" onclick="filterTasks('completed')">Completas</span>
+            </div>
+          </div>
+
+          <div class="kanban-columns" id="kanbanColumns">
+            <div class="kanban-col" id="colTodo">
+              <div class="col-head todo">
+                <span>📝 Por Hacer</span>
+                <span class="count" id="countTodo">0</span>
+              </div>
+              <div class="col-cards" id="cardsTodo"></div>
+            </div>
+
+            <div class="kanban-col" id="colInProgress">
+              <div class="col-head in_progress">
+                <span>⏳ En Curso</span>
+                <span class="count" id="countInProgress">0</span>
+              </div>
+              <div class="col-cards" id="cardsInProgress"></div>
+            </div>
+
+            <div class="kanban-col" id="colReview">
+              <div class="col-head review">
+                <span>👀 Revisión / QA</span>
+                <span class="count" id="countReview">0</span>
+              </div>
+              <div class="col-cards" id="cardsReview"></div>
+            </div>
+
+            <div class="kanban-col" id="colCompleted">
+              <div class="col-head completed">
+                <span>✅ Completado</span>
+                <span class="count" id="countCompleted">0</span>
+              </div>
+              <div class="col-cards" id="cardsCompleted"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Activity Stream -->
+        <div class="panel-card feed-panel">
+          <div class="card-header">
+            <div class="card-title">
+              <span>💬</span>
+              <h3>Feed de Actividad en Tiempo Real</h3>
+            </div>
+            <span class="feed-sub">Pases de guardia y broadcasts</span>
+          </div>
+
+          <div class="feed-stream" id="feedStream">
+            <!-- Populated dynamically -->
+            <div class="feed-empty">No hay mensajes recientes en el bus.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Section: Shared Contracts & Persistent Memories -->
+      <div class="bottom-split">
+        
+        <!-- Shared Artifacts / Contracts -->
+        <div class="panel-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>📦</span>
+              <h3>Contratos & Especificaciones Compartidas</h3>
+            </div>
+            <span class="feed-sub" id="artifactsCountBadge">0 Contratos</span>
+          </div>
+          <div class="artifacts-list" id="artifactsList">
+            <div class="empty-state">No hay artefactos compartidos aún.</div>
+          </div>
+        </div>
+
+        <!-- Context Memories -->
+        <div class="panel-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>🧠</span>
+              <h3>Memoria Persistente de Contexto (FTS5)</h3>
+            </div>
+            <span class="feed-sub" id="memoriesCountBadge">0 Recuerdos</span>
+          </div>
+          <div class="memories-list" id="memoriesList">
+            <div class="empty-state">No hay recuerdos almacenados aún.</div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- VIEW 2: GETBRAIN KNOWLEDGE GRAPH -->
+    <section id="viewBrain" class="view-panel">
+      
+      <!-- Graph Canvas Container -->
+      <div class="brain-wrapper">
+        <div class="brain-toolbar">
+          <div class="toolbar-group">
+            <span class="toolbar-label">Filtros de Nodo:</span>
+            <button class="filter-btn active" data-type="agent" onclick="toggleFilter('agent')">
+              <span class="dot agent"></span> Agentes
+            </button>
+            <button class="filter-btn active" data-type="task" onclick="toggleFilter('task')">
+              <span class="dot task"></span> Tareas
+            </button>
+            <button class="filter-btn active" data-type="artifact" onclick="toggleFilter('artifact')">
+              <span class="dot artifact"></span> Contratos
+            </button>
+            <button class="filter-btn active" data-type="memory" onclick="toggleFilter('memory')">
+              <span class="dot memory"></span> Memorias
+            </button>
+            <button class="filter-btn active" data-type="module" onclick="toggleFilter('module')">
+              <span class="dot module"></span> Módulos
+            </button>
+          </div>
+
+          <div class="toolbar-search">
+            <span>🔍</span>
+            <input type="text" id="brainSearchInput" placeholder="Buscar nodo en el grafo..." oninput="onBrainSearch(this.value)">
+          </div>
+
+          <div class="toolbar-actions">
+            <button class="tool-btn" onclick="zoomIn()" title="Acercar">➕</button>
+            <button class="tool-btn" onclick="zoomOut()" title="Alejar">➖</button>
+            <button class="tool-btn" onclick="resetZoom()" title="Centrar">🎯</button>
+            <button class="tool-btn" id="physicsToggle" onclick="togglePhysics()" title="Pausar Física">⏸️</button>
+            <button class="tool-btn primary" onclick="scanCodebase()" title="Escanear Código">🔄 Escanear</button>
+          </div>
+        </div>
+
+        <div class="canvas-container" id="canvasContainer">
+          <canvas id="brainCanvas"></canvas>
+          
+          <!-- Graph Legend overlay -->
+          <div class="brain-legend">
+            <div class="legend-item"><span class="legend-dot hub"></span> Hub Proyecto</div>
+            <div class="legend-item"><span class="legend-dot agent"></span> Agentes</div>
+            <div class="legend-item"><span class="legend-dot task"></span> Tareas</div>
+            <div class="legend-item"><span class="legend-dot artifact"></span> Contratos / APIs</div>
+            <div class="legend-item"><span class="legend-dot memory"></span> Decisiones & Reglas</div>
+            <div class="legend-item"><span class="legend-dot module"></span> Archivos de Código</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node Inspector Drawer (Sliding from Right) -->
+      <aside class="node-inspector" id="nodeInspector">
+        <div class="inspector-header">
+          <div class="inspector-badge" id="inspBadge">NODO</div>
+          <button class="btn-close" onclick="closeInspector()">✕</button>
+        </div>
+        <div class="inspector-body">
+          <h2 class="insp-title" id="inspTitle">Nombre del Nodo</h2>
+          <div class="insp-meta" id="inspMeta">Categoría • Estado</div>
+          <div class="insp-section">
+            <label>Detalles / Especificación:</label>
+            <div class="insp-content" id="inspContent"></div>
+          </div>
+          <div class="insp-section">
+            <label>Conexiones Vinculadas:</label>
+            <div class="insp-connections" id="inspConnections"></div>
+          </div>
+        </div>
+      </aside>
+
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

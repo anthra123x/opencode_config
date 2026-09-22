@@ -273,6 +273,14 @@ fi
 do_step "Installing ecc CLI..."
 cp "$REPO_DIR/ecc" "$LOCAL_BIN/ecc"
 chmod +x "$LOCAL_BIN/ecc"
+
+# 10. Install Web Cockpit & GetBrain
+if [ -d "$REPO_DIR/web" ]; then
+  mkdir -p "$CONFIG_DIR/web/public"
+  cp -r "$REPO_DIR/web/"* "$CONFIG_DIR/web/"
+  chmod +x "$CONFIG_DIR/web/server.py" "$CONFIG_DIR/web/brain_builder.py"
+  log "Web Cockpit & GetBrain installed to $CONFIG_DIR/web/"
+fi
 log "ecc CLI installed to $LOCAL_BIN/ecc"
 
 # 10. Copy scripts & templates
@@ -288,6 +296,13 @@ done
 if [ -d "$REPO_DIR/templates" ]; then
   mkdir -p "$CONFIG_DIR/templates"
   cp -r "$REPO_DIR/templates/"* "$CONFIG_DIR/templates/" 2>/dev/null || true
+fi
+
+# Install OpenCode Swarm launcher wrapper
+if [ -f "$REPO_DIR/templates/opencode-wrapper.sh" ]; then
+  cp "$REPO_DIR/templates/opencode-wrapper.sh" "$LOCAL_BIN/opencode"
+  chmod +x "$LOCAL_BIN/opencode"
+  log "OpenCode Swarm launcher installed to $LOCAL_BIN/opencode"
 fi
 
 # ──────────────── STEP: Post-install ────────────────

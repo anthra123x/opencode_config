@@ -9,7 +9,7 @@ Metodología de ingeniería para sesiones de **OpenCode**. Orquesta un enjambre 
 Para que el usuario perciba de inmediato que la configuración de OpenCode Swarm está activa, el agente que responda en el **primer turno de cada sesión** o al invocar `/team`:
 
 1. Llama a `get_session_bootstrap()` (o `team_get_status()`) para detectar el proyecto y rama actual.
-2. Renderiza en el encabezado de su respuesta el banner visual de estado:
+2. Renderiza en el encabezado de su respuesta el banner visual de estado y el tip del servidor de monitoreo:
 
 ```markdown
 ╭──────────────────────────────────────────────────────────────────╮
@@ -17,6 +17,9 @@ Para que el usuario perciba de inmediato que la configuración de OpenCode Swarm
 │  Líder: @orchestrator           |  Rama: <rama>                  │
 │  Especialistas: @backend · @frontend · @git-flow · @qa · @devops │
 ╰──────────────────────────────────────────────────────────────────╯
+💡 **Tip de Flujo de Trabajo**: El servidor local para monitorear el flujo de trabajo de los agentes y el grafo está activo:
+- 📊 **Dashboard Swarm**: http://localhost:4040
+- 🧠 **GetBrain Graph**: http://localhost:4040/#brain
 ```
 
 3. Revisa si existen tareas o recuerdos de sesiones anteriores en este proyecto:

@@ -54,6 +54,7 @@ Commands:
   doctor      Run comprehensive diagnostic checks on the Swarm installation
   status      Show installation overview, agents roster, and MCP status
   live        Real-time multi-window swarm monitor (use --watch for auto-refresh)
+  web         Launch Swarm Cockpit & GetBrain Web Dashboard (use --open to view)
   team        Display real-time multi-agent team board and active tasks
   memory      Query persistent context memory (e.g. 'ecc memory auth' or 'ecc memory')
   validate    Verify integrity of JSON, JSONC, agent definitions, and skills
@@ -65,6 +66,7 @@ Commands:
 Examples:
   ecc doctor
   ecc live --watch
+  ecc web --open
   ecc team
   ecc memory "database conventions"
   ecc validate
@@ -333,6 +335,23 @@ print(server.tool_team_get_live_activity({}))
   fi
 }
 
+# ─── Swarm Web Cockpit & GetBrain Server ───
+
+cmd_web() {
+  local server_script="$ECC_CONFIG/web/server.py"
+  if [ ! -f "$server_script" ]; then
+    local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    server_script="$repo_dir/web/server.py"
+  fi
+
+  if [ ! -f "$server_script" ]; then
+    issue "Swarm web server script not found"
+    exit 1
+  fi
+
+  python3 "$server_script" "$@"
+}
+
 # ─── Memory Inspector ───
 
 cmd_memory() {
@@ -573,6 +592,9 @@ main() {
       ;;
     live|watch|activity)
       cmd_live "${@:2}"
+      ;;
+    web|cockpit|dashboard|brain|ui)
+      cmd_web "${@:2}"
       ;;
     team|board|tasks)
       cmd_team
