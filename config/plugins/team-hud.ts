@@ -5,7 +5,9 @@
  */
 
 export default async function teamHudPlugin({ project, directory }: any) {
-  const projName = project || (directory ? directory.split("/").pop() : "Workspace");
+  const rawName = (typeof project === "string" ? project : (project?.worktree || project?.name || project?.id)) ||
+                  (directory ? directory.split("/").pop() : "Workspace");
+  const projName = String(rawName);
 
   // Set terminal title via ANSI OSC sequence
   if (process.stdout && process.stdout.isTTY) {
@@ -18,6 +20,7 @@ export default async function teamHudPlugin({ project, directory }: any) {
   const C_GREEN  = "\x1b[38;5;48m";
   const C_BOLD   = "\x1b[1m";
   const C_DIM    = "\x1b[2m";
+  const C_RESET  = "\x1b[0m";
   const C_YELLOW = "\x1b[38;5;220m";
   const C_BLUE   = "\x1b[38;5;75m";
 

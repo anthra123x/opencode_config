@@ -14,7 +14,7 @@
     "orchestrator": {
       "mode": "primary",
       "color": "#8B5CF6",
-      "description": "Team Lead & Orchestrator. Analyzes requirements, plans architecture, coordinates the swarm, and synthesizes deliverables."
+      "description": "Team Lead & Orchestrator. Monitoreo en vivo: http://localhost:4040 | GetBrain: http://localhost:4040/#brain"
     },
     "backend": {
       "mode": "primary",
