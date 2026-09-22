@@ -12,15 +12,72 @@ import os
 import sqlite3
 import datetime
 import subprocess
+import time
+import random
 from pathlib import Path
+from contextlib import contextmanager
 
 # Setup paths
 DEFAULT_TEAM_DIR = Path.home() / ".opencode" / "team"
 DB_PATH = Path(os.environ.get("OPENCODE_TEAM_DB", DEFAULT_TEAM_DIR / "team_collab.db"))
 
+@contextmanager
+def db_write_lock(conn, max_retries=10, base_delay=0.03):
+    """
+    Acquires immediate write lock on SQLite with exponential backoff and jitter.
+    Guarantees that multiple concurrent OpenCode windows/processes never deadlock
+    or fail with 'database is locked'.
+    """
+    for attempt in range(max_retries):
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn
+                conn.execute("COMMIT")
+                return
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+        except sqlite3.OperationalError as e:
+            err_msg = str(e).lower()
+            if ("locked" in err_msg or "busy" in err_msg) and attempt < max_retries - 1:
+                sleep_time = (base_delay * (1.6 ** attempt)) + random.uniform(0.01, 0.04)
+                time.sleep(sleep_time)
+                continue
+            raise
+
+def format_relative_time(iso_str):
+    if not iso_str:
+        return "desconocido"
+    try:
+        t = datetime.datetime.fromisoformat(iso_str)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=datetime.timezone.utc)
+        diff_sec = max(0, int((now - t).total_seconds()))
+        if diff_sec < 5:
+            return "hace un momento"
+        if diff_sec < 60:
+            return f"hace {diff_sec}s"
+        diff_min = diff_sec // 60
+        if diff_min < 60:
+            return f"hace {diff_min}m"
+        diff_hours = diff_min // 60
+        if diff_hours < 24:
+            return f"hace {diff_hours}h"
+        return f"hace {diff_hours // 24}d"
+    except Exception:
+        return iso_str
+
 def get_current_project(explicit=None):
     if explicit and str(explicit).strip():
         return str(explicit).strip()
+    env_proj = os.environ.get("OPENCODE_PROJECT", "").strip()
+    if env_proj:
+        return env_proj
     try:
         root = subprocess.check_output(
             ["git", "rev-parse", "--show-toplevel"],
@@ -45,10 +102,13 @@ def get_current_branch():
 
 def get_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA busy_timeout = 30000;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     with conn:
-        # Agent status registry with project tracking
+        # Agent status registry with project tracking and window heartbeat
         conn.execute("""
             CREATE TABLE IF NOT EXISTS team_agents (
                 agent_name TEXT PRIMARY KEY,
@@ -56,6 +116,8 @@ def get_db():
                 status TEXT NOT NULL DEFAULT 'idle',
                 current_task TEXT DEFAULT '',
                 blockers TEXT DEFAULT '',
+                window_id TEXT DEFAULT '',
+                last_heartbeat TEXT DEFAULT '',
                 updated_at TEXT NOT NULL
             )
         """)
@@ -100,8 +162,16 @@ def get_db():
             )
         """)
 
-        # Migration helper for existing databases missing 'project' column
-        for table in ["team_agents", "team_messages", "team_tasks", "team_artifacts"]:
+        # Migration helper for existing databases missing columns
+        for col, col_def in [("project", "TEXT NOT NULL DEFAULT 'default'"),
+                             ("window_id", "TEXT DEFAULT ''"),
+                             ("last_heartbeat", "TEXT DEFAULT ''")]:
+            try:
+                conn.execute(f"ALTER TABLE team_agents ADD COLUMN {col} {col_def}")
+            except sqlite3.OperationalError:
+                pass
+
+        for table in ["team_messages", "team_tasks", "team_artifacts"]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN project TEXT NOT NULL DEFAULT 'default'")
             except sqlite3.OperationalError:
@@ -151,6 +221,7 @@ TOOLS = [
                 "status": {"type": "string", "enum": ["idle", "working", "blocked", "ready_for_review"], "description": "Current agent status"},
                 "current_task": {"type": "string", "description": "Brief description of the current task being executed"},
                 "blockers": {"type": "string", "description": "Any blockers or dependencies (optional)"},
+                "window_id": {"type": "string", "description": "Optional window or terminal identifier (e.g. 'backend-term', 'window-1')"},
                 "project": {"type": "string", "description": "Project scope (defaults to current project)"}
             },
             "required": ["agent_name", "status"]
@@ -164,6 +235,31 @@ TOOLS = [
             "properties": {
                 "project": {"type": "string", "description": "Project scope (defaults to current project)"}
             }
+        }
+    },
+    {
+        "name": "team_get_live_activity",
+        "description": "Get real-time live activity across all terminal windows and sub-agents for this project: active windows, who is currently working, time since last activity, in-progress tasks, and new artifacts.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project scope (defaults to current project)"},
+                "max_age_minutes": {"type": "integer", "description": "Minutes threshold to consider an agent actively working (default 30)"}
+            }
+        }
+    },
+    {
+        "name": "team_heartbeat",
+        "description": "Send a periodic heartbeat from the current window/session to notify all other OpenCode windows that this agent is actively running.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "agent_name": {"type": "string", "description": "Agent name (e.g. 'backend', 'frontend', 'git-flow', 'qa-auditor', 'orchestrator')"},
+                "window_id": {"type": "string", "description": "Optional terminal window or session identifier (e.g. 'window-backend', 'term-1')"},
+                "current_task": {"type": "string", "description": "Optional brief task description"},
+                "project": {"type": "string", "description": "Project scope (defaults to current project)"}
+            },
+            "required": ["agent_name"]
         }
     },
     {
@@ -267,8 +363,22 @@ TOOLS = [
 ]
 
 # Tool Implementations
+def normalize_agent_name(name):
+    if not name:
+        return ""
+    n = str(name).strip().lower()
+    if n.startswith("@"):
+        n = n[1:]
+    if n in ("test", "tester", "qa", "test-auditor"):
+        return "qa-auditor"
+    if n in ("git", "github"):
+        return "git-flow"
+    if n in ("lead", "arch", "architect"):
+        return "orchestrator"
+    return n
+
 def tool_team_broadcast(args):
-    sender = args.get("sender", "").strip()
+    sender = normalize_agent_name(args.get("sender", ""))
     message = args.get("message", "").strip()
     category = args.get("category", "status").strip().lower()
     priority = args.get("priority", "normal").strip().lower()
@@ -279,7 +389,7 @@ def tool_team_broadcast(args):
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         conn.execute("""
             INSERT INTO team_messages (project, sender, message, category, priority, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -314,15 +424,17 @@ def tool_team_read_feed(args):
 
     lines = [f"=== Team Activity Feed [{project}] ({len(rows)} message(s)) ==="]
     for r in reversed(rows):
-        lines.append(f"#{r['id']} [@{r['sender']}] ({r['category'].upper()}) [{r['created_at']}]: {r['message']}")
+        rel = format_relative_time(r['created_at'])
+        lines.append(f"#{r['id']} [@{r['sender']}] ({r['category'].upper()}, {rel}): {r['message']}")
 
     return "\n".join(lines)
 
 def tool_team_set_status(args):
-    agent_name = args.get("agent_name", "").strip()
+    agent_name = normalize_agent_name(args.get("agent_name", ""))
     status = args.get("status", "idle").strip().lower()
     current_task = args.get("current_task", "").strip()
     blockers = args.get("blockers", "").strip()
+    window_id = args.get("window_id", "").strip() or os.environ.get("OPENCODE_WINDOW", "").strip()
     project = get_current_project(args.get("project"))
 
     if not agent_name:
@@ -330,19 +442,48 @@ def tool_team_set_status(args):
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         conn.execute("""
-            INSERT INTO team_agents (agent_name, project, status, current_task, blockers, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO team_agents (agent_name, project, status, current_task, blockers, window_id, last_heartbeat, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(agent_name) DO UPDATE SET
                 project = excluded.project,
                 status = excluded.status,
                 current_task = excluded.current_task,
                 blockers = excluded.blockers,
+                window_id = CASE WHEN excluded.window_id != '' THEN excluded.window_id ELSE team_agents.window_id END,
+                last_heartbeat = excluded.last_heartbeat,
                 updated_at = excluded.updated_at
-        """, (agent_name, project, status, current_task, blockers, now))
+        """, (agent_name, project, status, current_task, blockers, window_id, now, now))
 
-    return f"✓ Status updated for @{agent_name} [{project}]: {status.upper()} (Task: {current_task or 'none'})"
+    win_info = f" [Window: {window_id}]" if window_id else ""
+    return f"✓ Status updated for @{agent_name}{win_info} [{project}]: {status.upper()} (Task: {current_task or 'none'})"
+
+def tool_team_heartbeat(args):
+    agent_name = normalize_agent_name(args.get("agent_name", ""))
+    window_id = args.get("window_id", "").strip() or os.environ.get("OPENCODE_WINDOW", "").strip()
+    current_task = args.get("current_task", "").strip()
+    project = get_current_project(args.get("project"))
+
+    if not agent_name:
+        return "Error: agent_name is required."
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    conn = get_db()
+    with db_write_lock(conn):
+        conn.execute("""
+            INSERT INTO team_agents (agent_name, project, status, current_task, blockers, window_id, last_heartbeat, updated_at)
+            VALUES (?, ?, 'working', ?, '', ?, ?, ?)
+            ON CONFLICT(agent_name) DO UPDATE SET
+                project = excluded.project,
+                current_task = CASE WHEN excluded.current_task != '' THEN excluded.current_task ELSE team_agents.current_task END,
+                window_id = CASE WHEN excluded.window_id != '' THEN excluded.window_id ELSE team_agents.window_id END,
+                last_heartbeat = excluded.last_heartbeat,
+                updated_at = excluded.updated_at
+        """, (agent_name, project, current_task, window_id, now, now))
+
+    win_str = f" [{window_id}]" if window_id else ""
+    return f"💓 Heartbeat acknowledged for @{agent_name}{win_str} in [{project}] at {now}"
 
 def tool_team_get_status(args):
     project = get_current_project(args.get("project"))
@@ -353,7 +494,7 @@ def tool_team_get_status(args):
 
     # Query agents for this project
     cur_agents = conn.execute("""
-        SELECT agent_name, status, current_task, blockers, updated_at
+        SELECT agent_name, status, current_task, blockers, window_id, last_heartbeat, updated_at
         FROM team_agents
         WHERE project = ? OR project = 'default'
         ORDER BY agent_name
@@ -419,7 +560,10 @@ def tool_team_get_status(args):
             icon = "🟢" if a["status"] == "working" else "🟡" if a["status"] == "ready_for_review" else "🔴" if a["status"] == "blocked" else "⚪"
             task = f" → `{a['current_task']}`" if a["current_task"] else ""
             blocker = f" [BLOCKER: {a['blockers']}]" if a["blockers"] else ""
-            out.append(f"• {icon} **@{role}** ({a['status'].upper()}):{task}{blocker}")
+            win = f" [{a['window_id']}]" if a['window_id'] else ""
+            time_val = a['last_heartbeat'] or a['updated_at']
+            rel = format_relative_time(time_val)
+            out.append(f"• {icon} **@{role}**{win} ({a['status'].upper()}, {rel}):{task}{blocker}")
         else:
             out.append(f"• ⚪ **@{role}** (IDLE): Ready for assignment")
 
@@ -440,20 +584,133 @@ def tool_team_get_status(args):
     if artifacts:
         out.append("\n### 📦 Shared Project Artifacts & Contracts")
         for art in artifacts:
-            out.append(f"• **`{art['artifact_key']}`** ({art['title']}) [{art['artifact_type'].upper()}] - by @{art['creator']}")
+            rel = format_relative_time(art['updated_at'])
+            out.append(f"• **`{art['artifact_key']}`** ({art['title']}) [{art['artifact_type'].upper()}] - by @{art['creator']} ({rel})")
 
     # Latest Activity
     if feed:
         out.append("\n### 💬 Recent Team Announcements")
         for m in feed:
-            out.append(f"• **@{m['sender']}** ({m['category']}): {m['message']}")
+            rel = format_relative_time(m['created_at'])
+            out.append(f"• **@{m['sender']}** ({m['category']}, {rel}): {m['message']}")
+
+    return "\n".join(out)
+
+def tool_team_get_live_activity(args):
+    project = get_current_project(args.get("project"))
+    max_age_min = int(args.get("max_age_minutes", 30))
+    branch = get_current_branch()
+    branch_str = f" (branch: `{branch}`)" if branch else ""
+
+    conn = get_db()
+    # Query all agents for this project
+    cur_agents = conn.execute("""
+        SELECT agent_name, status, current_task, blockers, window_id, last_heartbeat, updated_at
+        FROM team_agents
+        WHERE project = ? OR project = 'default'
+        ORDER BY updated_at DESC
+    """, (project,))
+    agents = cur_agents.fetchall()
+
+    # Query active tasks (in_progress, review, todo)
+    cur_tasks = conn.execute("""
+        SELECT id, title, assigned_to, status, priority, updated_at
+        FROM team_tasks
+        WHERE project = ? AND status IN ('in_progress', 'todo', 'review')
+        ORDER BY CASE status WHEN 'in_progress' THEN 1 WHEN 'review' THEN 2 ELSE 3 END, id DESC
+        LIMIT 10
+    """, (project,))
+    active_tasks = cur_tasks.fetchall()
+
+    # Query recent artifacts
+    cur_art = conn.execute("""
+        SELECT artifact_key, title, creator, artifact_type, updated_at
+        FROM team_artifacts
+        WHERE project = ?
+        ORDER BY updated_at DESC LIMIT 5
+    """, (project,))
+    recent_artifacts = cur_art.fetchall()
+
+    # Query latest feed
+    cur_feed = conn.execute("""
+        SELECT id, sender, message, category, priority, created_at
+        FROM team_messages
+        WHERE project = ?
+        ORDER BY id DESC LIMIT 5
+    """, (project,))
+    recent_messages = cur_feed.fetchall()
+
+    now_clock = datetime.datetime.now().strftime("%H:%M:%S")
+    out = [
+        "╔══════════════════════════════════════════════════════════════╗",
+        f"║  ⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫  |  Project: {project:<15} ║",
+        "║  📡 REAL-TIME MULTI-WINDOW ACTIVITY MONITOR                  ║",
+        "╚══════════════════════════════════════════════════════════════╝",
+        f"**Workspace**: `{project}`{branch_str} | **Live Clock**: `{now_clock}`\n",
+        "### 🖥️ Active Windows & Agent Sessions"
+    ]
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    if not agents:
+        out.append("• No active sessions recorded yet for this project.")
+    else:
+        for a in agents:
+            time_val = a['last_heartbeat'] or a['updated_at']
+            rel_time = format_relative_time(time_val)
+            is_recent = False
+            try:
+                t = datetime.datetime.fromisoformat(time_val)
+                if t.tzinfo is None:
+                    t = t.replace(tzinfo=datetime.timezone.utc)
+                if (now_utc - t).total_seconds() <= max_age_min * 60:
+                    is_recent = True
+            except Exception:
+                pass
+
+            win_str = f" [Window: `{a['window_id']}`]" if a['window_id'] else ""
+            if a['status'] == 'working' and is_recent:
+                icon = "🟢 ACTIVE"
+            elif a['status'] == 'blocked':
+                icon = "🔴 BLOCKED"
+            elif a['status'] == 'ready_for_review':
+                icon = "🟡 REVIEW"
+            elif not is_recent:
+                icon = "⚪ IDLE/OFFLINE"
+            else:
+                icon = f"⚪ {a['status'].upper()}"
+
+            task_info = f" → `{a['current_task']}`" if a['current_task'] else " (No current task)"
+            blocker_info = f" ⚠️ **Blocker**: {a['blockers']}" if a['blockers'] else ""
+            out.append(f"• **@{a['agent_name']}**{win_str} [{icon}] ({rel_time}):{task_info}{blocker_info}")
+
+    out.append("\n### 📋 Tasks In Progress Across Windows")
+    if active_tasks:
+        for t in active_tasks:
+            who = f"@{t['assigned_to']}" if t['assigned_to'] else "Unassigned"
+            icon = "⏳" if t['status'] == 'in_progress' else "👀" if t['status'] == 'review' else "📝"
+            rel = format_relative_time(t['updated_at'])
+            out.append(f"• {icon} **#{t['id']}** [{t['status'].upper()}] {t['title']} ({who}, {rel})")
+    else:
+        out.append("• No active tasks currently.")
+
+    if recent_artifacts:
+        out.append("\n### 📦 Recently Published Contracts / Specs")
+        for art in recent_artifacts:
+            rel = format_relative_time(art['updated_at'])
+            out.append(f"• **`{art['artifact_key']}`** ({art['title']}) [{art['artifact_type'].upper()}] by @{art['creator']} ({rel})")
+
+    if recent_messages:
+        out.append("\n### 💬 Latest Cross-Window Messages")
+        for m in recent_messages:
+            rel = format_relative_time(m['created_at'])
+            out.append(f"• [#{m['id']}] **@{m['sender']}** ({m['category']}, {rel}): {m['message']}")
 
     return "\n".join(out)
 
 def tool_team_post_task(args):
     title = args.get("title", "").strip()
     description = args.get("description", "").strip()
-    assigned_to = args.get("assigned_to", "").strip()
+    assigned_to = normalize_agent_name(args.get("assigned_to", ""))
     priority = args.get("priority", "normal").strip().lower()
     project = get_current_project(args.get("project"))
 
@@ -462,7 +719,7 @@ def tool_team_post_task(args):
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         cur = conn.execute("""
             INSERT INTO team_tasks (project, title, description, assigned_to, status, priority, created_at, updated_at)
             VALUES (?, ?, ?, ?, 'todo', ?, ?, ?)
@@ -474,7 +731,7 @@ def tool_team_post_task(args):
 
 def tool_team_claim_task(args):
     task_id = int(args.get("task_id", 0))
-    agent_name = args.get("agent_name", "").strip()
+    agent_name = normalize_agent_name(args.get("agent_name", ""))
     project = get_current_project(args.get("project"))
 
     if not task_id or not agent_name:
@@ -482,7 +739,7 @@ def tool_team_claim_task(args):
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         cur = conn.execute("""
             UPDATE team_tasks
             SET assigned_to = ?, status = 'in_progress', updated_at = ?
@@ -516,7 +773,7 @@ def tool_team_update_task(args):
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         cur = conn.execute("""
             UPDATE team_tasks
             SET status = ?, notes = CASE WHEN ? != '' THEN ? ELSE notes END, updated_at = ?
@@ -529,7 +786,7 @@ def tool_team_update_task(args):
 
 def tool_team_list_tasks(args):
     status = args.get("status", "")
-    assigned_to = args.get("assigned_to", "")
+    assigned_to = normalize_agent_name(args.get("assigned_to", ""))
     project = get_current_project(args.get("project"))
 
     conn = get_db()
@@ -559,7 +816,7 @@ def tool_team_list_tasks(args):
     return "\n".join(lines)
 
 def tool_team_share_artifact(args):
-    creator = args.get("creator", "").strip()
+    creator = normalize_agent_name(args.get("creator", ""))
     artifact_key = args.get("artifact_key", "").strip()
     title = args.get("title", "").strip()
     artifact_type = args.get("artifact_type", "general").strip()
@@ -571,7 +828,7 @@ def tool_team_share_artifact(args):
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         conn.execute("""
             INSERT INTO team_artifacts (artifact_key, project, title, creator, artifact_type, content, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -607,8 +864,8 @@ def tool_team_get_artifact(args):
     return f"# [{r['artifact_type'].upper()}] {r['title']} (Key: {r['artifact_key']})\nProject: {r['project']} | Shared by: @{r['creator']} at {r['updated_at']}\n\n{r['content']}"
 
 def tool_team_handoff(args):
-    from_agent = args.get("from_agent", "").strip()
-    to_agent = args.get("to_agent", "").strip()
+    from_agent = normalize_agent_name(args.get("from_agent", ""))
+    to_agent = normalize_agent_name(args.get("to_agent", ""))
     notes = args.get("notes", "").strip()
     task_id = args.get("task_id")
     artifact_key = args.get("artifact_key", "")
@@ -619,7 +876,7 @@ def tool_team_handoff(args):
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         # Update from_agent to ready_for_review / idle
         conn.execute("""
             INSERT INTO team_agents (agent_name, project, status, current_task, updated_at)
@@ -666,6 +923,8 @@ TOOL_HANDLERS = {
     "team_read_feed": tool_team_read_feed,
     "team_set_status": tool_team_set_status,
     "team_get_status": tool_team_get_status,
+    "team_get_live_activity": tool_team_get_live_activity,
+    "team_heartbeat": tool_team_heartbeat,
     "team_post_task": tool_team_post_task,
     "team_claim_task": tool_team_claim_task,
     "team_update_task": tool_team_update_task,

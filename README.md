@@ -69,12 +69,19 @@ Cada agente cuenta con su propio color de distintivo en el TUI, prompt operacion
 
 | Agente | Color | Modo | Rol & Responsabilidad | Skills Clave Integrados |
 |---|---|---|---|---|
-| **`@orchestrator`** | `#8B5CF6` (Morado) | `primary` | **Líder Técnico & Arquitecto**: Coordina el enjambre, desglosa épicas en tareas, gestiona memoria y sintetiza entregables. | `council`, `code-tour`, `strategic-compact`, `agent-sort` |
-| **`@backend`** | `#3B82F6` (Azul) | `subagent` | **Ingeniero Backend & BD**: APIs REST/GraphQL, esquemas relacionales, migraciones y TDD estricto. | `postgres-patterns`, `prisma-patterns`, `mysql-patterns`, `database-migrations`, `tdd-workflow` |
-| **`@frontend`** | `#EC4899` (Rosa Neón) | `subagent` | **Ingeniero UI/UX & Motion**: Interfaces accesibles, diseño anti-slop, animaciones fluidas con resortes y tokens de diseño. | `impeccable`, `design-taste-frontend`, `emil-design-eng`, `review-animations`, `animation-vocabulary` |
-| **`@git-flow`** | `#10B981` (Verde Esmeralda) | `subagent` | **Control de Flujo Git & GitHub**: Commits semánticos, ramas seguras, resolución de conflictos y resúmenes de PR. | `git-flow-pro`, `verification-loop` |
-| **`@qa-auditor`** | `#F59E0B` (Ámbar) | `subagent` | **Auditor de Calidad & Seguridad**: Loop de verificación en 6 etapas, cobertura $\ge$ 80%, auditorías OWASP y regresiones IA. | `verification-loop`, `production-audit`, `ai-regression-testing`, `eval-harness` |
+| **`@orchestrator`** | `#8B5CF6` (Morado) | `primary` (TAB) | **Líder Técnico & Arquitecto**: Coordina el enjambre, desglosa épicas en tareas, gestiona memoria y sintetiza entregables. | `council`, `code-tour`, `strategic-compact`, `agent-sort` |
+| **`@backend`** | `#3B82F6` (Azul) | `primary` (TAB) | **Ingeniero Backend & BD**: APIs REST/GraphQL, esquemas relacionales, migraciones y TDD estricto. | `postgres-patterns`, `prisma-patterns`, `mysql-patterns`, `database-migrations`, `tdd-workflow` |
+| **`@frontend`** | `#EC4899` (Rosa Neón) | `primary` (TAB) | **Ingeniero UI/UX & Motion**: Interfaces accesibles, diseño anti-slop, animaciones fluidas con resortes y tokens de diseño. | `impeccable`, `design-taste-frontend`, `emil-design-eng`, `review-animations`, `animation-vocabulary` |
+| **`@git-flow`** | `#10B981` (Verde Esmeralda) | `primary` (TAB) | **Control de Flujo Git & GitHub**: Commits semánticos, ramas seguras, resolución de conflictos y resúmenes de PR. | `git-flow-pro`, `verification-loop` |
+| **`@qa-auditor`** | `#F59E0B` (Ámbar) | `primary` (TAB) | **Auditor de Calidad & Test**: Loop de verificación en 6 etapas, cobertura $\ge$ 80%, auditorías OWASP y regresiones IA. | `verification-loop`, `production-audit`, `ai-regression-testing`, `eval-harness` |
 | **`@devops`** | `#06B6D4` (Cian) | `subagent` | **Infraestructura & Contenedores**: Dockerfiles multi-stage, rootless, Compose, CI/CD y despliegues reproducibles. | `docker-patterns`, `lint-format` |
+
+### ⌨️ Conmutación Interactiva con la Tecla TAB
+En el prompt interactivo de OpenCode, simplemente presiona **`TAB`** para alternar de forma instantánea entre los roles principales:
+
+$$\text{[orchestrator]} \xrightarrow{\text{TAB}} \text{[backend]} \xrightarrow{\text{TAB}} \text{[frontend]} \xrightarrow{\text{TAB}} \text{[git-flow]} \xrightarrow{\text{TAB}} \text{[qa-auditor]}$$
+
+Cada especialista cuenta con sus criterios de dominio y se sincroniza en tiempo real a través del bus MCP (`team-collab`) y memoria persistente (`context-memory`).
 
 ---
 
@@ -137,15 +144,15 @@ Puedes ejecutar estos comandos directamente dentro de la interfaz de OpenCode:
 
 | Comando | Acción |
 |---|---|
+| `/live` | Monitor multi-ventana en tiempo real. Muestra qué ventana y tarea tiene cada especialista al instante. |
 | `/team` | Despliega el dashboard completo del enjambre, estado de los 6 agentes y el tablero de tareas. |
 | `/tasks` | Consulta el tablero interactivo de tareas del proyecto actual. |
 | `/memory [query]` | Realiza una búsqueda o muestra el contexto activo persistido en SQLite FTS5. |
 | `/handoff` | Asiste en el traspaso documentado de una tarea entre dos especialistas. |
-| `/backend` | Convoca a `@backend` para modelado de BD, endpoints, migraciones o lógica de servidor. |
-| `/frontend` | Convoca a `@frontend` para componentes UI, accesibilidad, motion y refinamiento visual. |
-| `/git-flow` | Convoca a `@git-flow` para auditar git status/diffs y generar commits convencionales. |
-| `/qa` | Convoca a `@qa-auditor` para ejecutar el loop de verificación y auditoría de seguridad. |
 | `/graph-brain` | Indexa y mapea la arquitectura del código fuente mediante AST. |
+
+> [!TIP]
+> Los comandos `/backend`, `/frontend`, `/git-flow` y `/qa` ya no son necesarios: ahora puedes alternar directamente entre los especialistas presionando **`TAB`** en el prompt.
 
 ---
 
@@ -178,6 +185,9 @@ El comando `ecc` queda instalado en tu `$PATH` (`~/.local/bin/ecc`) para control
 # Diagnóstico completo de componentes, agentes y servidores MCP
 ecc doctor
 
+# Monitor en tiempo real multi-ventana (auto-refresco cada 2 segundos)
+ecc live --watch
+
 # Ver el tablero del equipo y tareas activas en el directorio actual
 ecc team
 
@@ -196,6 +206,29 @@ ecc configure
 # Actualizar el repositorio a la última versión
 ecc update
 ```
+
+---
+
+## 🖥️ Flujo Multi-Ventana en Tiempo Real (Anti-Vuelco & Zero Locks)
+
+OpenCode Swarm está diseñado para el flujo de trabajo profesional con **múltiples ventanas/terminales de OpenCode corriendo simultáneamente en el mismo proyecto**:
+
+- **Ventana 1**: `@backend` (construyendo endpoints, bases de datos y migraciones).
+- **Ventana 2**: `@frontend` (maquetando interfaces y consumiendo contratos).
+- **Ventana 3**: `@git-flow` (controlando ramas, commits convencionales y pull requests).
+- **Ventana 4**: `ecc live --watch` (monitor en vivo en un split de terminal o tmux).
+
+### ¿Cómo se comunican en tiempo real?
+1. **Consciencia Instantánea**: Cada vez que un agente recibe una instrucción, ejecuta `team_get_live_activity()` para saber quién está activo en las otras terminales, qué archivos están tocando y si hay tareas en curso.
+2. **Identificador de Ventana y Heartbeats**: Cada sesión se registra con su identificador de ventana (`window_id`), emitiendo pulsos periódicos y marcas de tiempo relativas (*"hace 10s"*, *"hace 1m"*).
+3. **Contratos Inmediatos**: Cuando `@backend` termina un endpoint, publica el contrato en `team_share_artifact` y difunde el aviso por `team_broadcast`. `@frontend` en la Ventana 2 lo detecta de inmediato y lo consume con `team_get_artifact`.
+
+### ¿Por qué OpenCode NUNCA se vuelca con este flujo?
+Cuando varios procesos intentan escribir al mismo tiempo en SQLite en modo tradicional, ocurre el error fatal `database is locked` y la aplicación se congela o cae. OpenCode Swarm previene esto con una arquitectura industrial:
+- **Modo WAL (Write-Ahead Logging)**: Lectores y escritores no se bloquean mutuamente.
+- **Busy Timeout de 30s**: `PRAGMA busy_timeout = 30000;`.
+- **Bloqueo Inmediato Exclusivo (`BEGIN IMMEDIATE`)**: Previene bloqueos mortales (deadlocks) encolando las transacciones de escritura limpiamente.
+- **Exponential Backoff & Jitter**: Reintentos inteligentes automáticos (hasta 10 intentos con pausa aleatoria).
 
 ---
 

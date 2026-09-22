@@ -53,6 +53,7 @@ Usage: ecc <command> [options]
 Commands:
   doctor      Run comprehensive diagnostic checks on the Swarm installation
   status      Show installation overview, agents roster, and MCP status
+  live        Real-time multi-window swarm monitor (use --watch for auto-refresh)
   team        Display real-time multi-agent team board and active tasks
   memory      Query persistent context memory (e.g. 'ecc memory auth' or 'ecc memory')
   validate    Verify integrity of JSON, JSONC, agent definitions, and skills
@@ -63,7 +64,7 @@ Commands:
 
 Examples:
   ecc doctor
-  ecc status
+  ecc live --watch
   ecc team
   ecc memory "database conventions"
   ecc validate
@@ -285,6 +286,50 @@ print(server.tool_team_get_status({}))
   else
     issue "team-collab server script not found"
     exit 1
+  fi
+}
+
+# ─── Live Swarm Activity Monitor ───
+
+cmd_live() {
+  local server_script="$ECC_CONFIG/mcp/team-collab/server.py"
+  if [ ! -f "$server_script" ]; then
+    local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    server_script="$repo_dir/mcp/team-collab/server.py"
+  fi
+
+  if [ ! -f "$server_script" ]; then
+    issue "team-collab server script not found"
+    exit 1
+  fi
+
+  local watch_mode=false
+  for arg in "$@"; do
+    if [ "$arg" = "--watch" ] || [ "$arg" = "-w" ]; then
+      watch_mode=true
+    fi
+  done
+
+  if [ "$watch_mode" = true ]; then
+    echo -e "${C_CYAN}Starting real-time Swarm monitor (press Ctrl+C to exit)...${C_NC}"
+    trap "echo -e '\n${C_NC}Monitor stopped.'; exit 0" INT
+    while true; do
+      clear
+      python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_team_get_live_activity({}))
+"
+      sleep 2
+    done
+  else
+    python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_team_get_live_activity({}))
+"
   fi
 }
 
@@ -525,6 +570,9 @@ main() {
       ;;
     status|info)
       cmd_status
+      ;;
+    live|watch|activity)
+      cmd_live "${@:2}"
       ;;
     team|board|tasks)
       cmd_team

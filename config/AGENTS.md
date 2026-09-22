@@ -8,27 +8,33 @@ Este documento define los protocolos operacionales para los agentes de OpenCode,
 
 Todos los agentes especializados (`@orchestrator`, `@backend`, `@frontend`, `@git-flow`, `@qa-auditor`, `@devops`) forman un equipo cohesionado y sincronizado a través de este MCP.
 
-### Reglas de Sincronización:
-1. **Registro de Estado**: Al iniciar o cambiar de tarea, el agente DEBE actualizar su estado:
-   ```python
-   team_set_status(agent_name="backend", status="working", current_task="Building user auth endpoints")
-   ```
-   Estados válidos: `working`, `blocked`, `ready_for_review`, `idle`.
+### Reglas de Sincronización y Coordinación Multi-Ventana:
+1. **Conmutación Interactiva con `TAB`**:
+   - Los 5 roles esenciales (`@orchestrator`, `@backend`, `@frontend`, `@git-flow`, `@qa-auditor`) operan como agentes primarios. El usuario puede alternar entre ellos en cualquier momento pulsando `TAB` en el prompt interactivo.
 
-2. **Handoffs y Contratos entre Agentes**:
+2. **Consciencia Multi-Ventana en Tiempo Real**:
+   - En flujos de trabajo con múltiples terminales simultáneas (ej: Ventana 1 = Backend, Ventana 2 = Frontend, Ventana 3 = Git-Flow):
+   - Al iniciar cualquier tarea, el agente consulta `team_get_live_activity()` para saber quién está activo en otras ventanas y en qué archivo/tarea trabaja.
+   - Envía su estado o pulso de presencia:
+     ```python
+     team_set_status(agent_name="backend", status="working", current_task="Building user auth endpoints", window_id="win-backend")
+     ```
+     o emite pulsos de vida con `team_heartbeat(agent_name="backend", window_id="win-backend")`.
+
+3. **Handoffs y Contratos entre Agentes**:
    - Cuando `@backend` termine un modelo de datos o endpoints, DEBE compartir el contrato antes de que `@frontend` empiece a consumir endpoints ciegamente:
      ```python
      team_share_artifact(creator="backend", artifact_key="auth-api-v1", title="Auth Endpoints Contract", artifact_type="api_spec", content="...")
      ```
-   - `@frontend` recupera el contrato usando `team_get_artifact(artifact_key="auth-api-v1")`.
+   - `@frontend` en su ventana detecta el contrato inmediatamente y lo recupera usando `team_get_artifact(artifact_key="auth-api-v1")`.
 
-3. **Anuncios y Bloqueos**:
+4. **Anuncios y Bloqueos**:
    - Si un agente se encuentra bloqueado o requiere intervención de otro dominio, publica un mensaje con categoría `warning` o `question`:
      ```python
      team_broadcast(sender="frontend", message="Blocked: Need updated JWT schema in auth-api-v1", category="warning", priority="high")
      ```
 
-4. **Tablero de Tareas**:
+5. **Tablero de Tareas**:
    - El `@orchestrator` publica las metas con `team_post_task()`.
    - Los especialistas reclaman sus tareas con `team_claim_task()` y las marcan completadas con `team_update_task()`.
 

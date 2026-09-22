@@ -12,11 +12,37 @@ import os
 import sqlite3
 import datetime
 import subprocess
+import time
+import random
 from pathlib import Path
+from contextlib import contextmanager
 
 # Paths & Setup
 DEFAULT_DB_DIR = Path.home() / ".opencode" / "memory"
 DB_PATH = Path(os.environ.get("OPENCODE_MEMORY_DB", DEFAULT_DB_DIR / "context_memory.db"))
+
+@contextmanager
+def db_write_lock(conn, max_retries=10, base_delay=0.03):
+    for attempt in range(max_retries):
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn
+                conn.execute("COMMIT")
+                return
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+        except sqlite3.OperationalError as e:
+            err_msg = str(e).lower()
+            if ("locked" in err_msg or "busy" in err_msg) and attempt < max_retries - 1:
+                sleep_time = (base_delay * (1.6 ** attempt)) + random.uniform(0.01, 0.04)
+                time.sleep(sleep_time)
+                continue
+            raise
 
 def get_current_project(explicit=None):
     if explicit and str(explicit).strip():
@@ -35,8 +61,11 @@ def get_current_project(explicit=None):
 
 def get_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA busy_timeout = 30000;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     with conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS memories (
@@ -183,7 +212,7 @@ def tool_remember(args):
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         conn.execute("""
             INSERT INTO memories (key, category, content, tags, project, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -297,7 +326,7 @@ def tool_delete_memory(args):
         return "Error: key must not be empty."
 
     conn = get_db()
-    with conn:
+    with db_write_lock(conn):
         cur = conn.execute("DELETE FROM memories WHERE key = ?", (key,))
         if cur.rowcount > 0:
             return f"✓ Memory '{key}' removed successfully."

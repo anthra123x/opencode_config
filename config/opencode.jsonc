@@ -14,32 +14,32 @@
     "orchestrator": {
       "mode": "primary",
       "color": "#8B5CF6",
-      "description": "Team Lead & Orchestrator. Analyzes user requirements, plans architecture, delegates tasks to specialists (@backend, @frontend, @git-flow, @qa-auditor), and synthesizes deliverables."
+      "description": "Team Lead & Orchestrator. Analyzes requirements, plans architecture, coordinates the swarm, and synthesizes deliverables."
     },
     "backend": {
-      "mode": "subagent",
+      "mode": "primary",
       "color": "#3B82F6",
-      "description": "Specialized Backend Engineer. Builds robust APIs, database schemas and migrations (PostgreSQL, Prisma, MySQL, JPA), business logic, and backend unit tests."
+      "description": "Specialized Backend Engineer. Builds APIs, database models (PostgreSQL, Prisma, MySQL), business logic, and TDD unit tests."
     },
     "frontend": {
-      "mode": "subagent",
+      "mode": "primary",
       "color": "#EC4899",
-      "description": "Specialized Frontend & UI/UX Engineer. Builds modern responsive web interfaces with curated typography, micro-animations, accessible components, and anti-slop design."
+      "description": "Specialized Frontend & UI/UX Engineer. Builds responsive web interfaces with curated typography, micro-animations, and anti-slop design."
     },
     "git-flow": {
-      "mode": "subagent",
+      "mode": "primary",
       "color": "#10B981",
-      "description": "Specialized Git and GitHub Workflow Manager. Manages branch lifecycles, conventional semantic commits, PR reviews and summaries, merge conflict resolution, and release hygiene."
+      "description": "Specialized Git and GitHub Workflow Manager. Manages branch lifecycles, conventional semantic commits, and PR reviews."
     },
     "qa-auditor": {
-      "mode": "subagent",
+      "mode": "primary",
       "color": "#F59E0B",
-      "description": "Specialized Quality Assurance & Verification Auditor. Audits test suites, ensures coverage >=80%, conducts security and production-readiness checks, and detects AI regressions."
+      "description": "Specialized Quality Assurance & Test Auditor. Audits test suites, ensures coverage >=80%, verifies builds, and detects AI regressions."
     },
     "devops": {
       "mode": "subagent",
       "color": "#06B6D4",
-      "description": "Specialized DevOps and Infrastructure Engineer. Crafts lean multi-stage Dockerfiles, Docker Compose setups, non-root configurations, and CI/CD pipelines."
+      "description": "Specialized DevOps and Infrastructure Engineer. Crafts lean multi-stage Dockerfiles, Docker Compose setups, and CI/CD pipelines."
     }
   },
   "permission": {
