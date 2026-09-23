@@ -59,6 +59,9 @@ export default async function teamHudPlugin({ project, directory }: any) {
     }
   } catch (_) {}
 
+  process.env.OPENCODE_WEB_PORT = webPort;
+  process.env.OPENCODE_WEB_URL = `http://localhost:${webPort}`;
+
   const webUrl = `http://localhost:${webPort}`;
   const brainUrl = `${webUrl}/#brain`;
 
