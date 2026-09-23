@@ -196,6 +196,43 @@ TOOLS = [
                 "conventions": {"type": "string", "description": "Code and workflow conventions"}
             }
         }
+    },
+    {
+        "name": "checkpoint_session",
+        "description": "Create a persistent milestone checkpoint for the project. Anchors active progress, architectural decisions, modified files, and next steps into context_memory.db so the swarm never loses context or relies on lossy token compaction.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "Concise summary of work accomplished and current status"},
+                "decisions": {"type": "string", "description": "Key architectural decisions, conventions, or design patterns adopted"},
+                "files_modified": {"type": "string", "description": "Comma-separated list or notes of key files modified"},
+                "active_task": {"type": "string", "description": "Current task in progress or recently completed"},
+                "next_steps": {"type": "string", "description": "Immediate next steps for subsequent turns or sessions"},
+                "project": {"type": "string", "description": "Project identifier (optional, defaults to current project)"}
+            },
+            "required": ["summary"]
+        }
+    },
+    {
+        "name": "get_session_checkpoint",
+        "description": "Retrieve the latest persistent session checkpoint for the project to resume work with 100% fidelity without relying on conversation compaction.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project identifier (optional, defaults to current project)"}
+            }
+        }
+    },
+    {
+        "name": "auto_sync_project_memory",
+        "description": "Inspects workspace files, package manifests, and Git state to automatically persist baseline architecture and tech-stack memories into context_memory.db.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name (optional)"},
+                "workspace_dir": {"type": "string", "description": "Project root directory (optional)"}
+            }
+        }
     }
 ]
 
@@ -438,6 +475,166 @@ def tool_sync_project_context(args):
 
     return f"✓ Synchronized project context for [{project}]: updated {', '.join(results) if results else 'ready'}."
 
+def tool_checkpoint_session(args):
+    project = get_current_project(args.get("project"))
+    summary = args.get("summary", "").strip()
+    decisions = args.get("decisions", "").strip()
+    files_modified = args.get("files_modified", "").strip()
+    active_task = args.get("active_task", "").strip()
+    next_steps = args.get("next_steps", "").strip()
+
+    if not summary:
+        return "Error: summary is required for a checkpoint."
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    now_human = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    md_lines = [
+        f"# Session Checkpoint: [{project}]",
+        f"**Timestamp**: {now_human} UTC",
+        f"**Active Task**: {active_task or 'General implementation'}",
+        "",
+        "### 📌 Summary of Progress",
+        summary,
+        ""
+    ]
+    if decisions:
+        md_lines.extend(["### 🏛️ Key Decisions & Architecture", decisions, ""])
+    if files_modified:
+        md_lines.extend(["### 📂 Modified Files", files_modified, ""])
+    if next_steps:
+        md_lines.extend(["### 🎯 Next Steps", next_steps, ""])
+
+    checkpoint_content = "\n".join(md_lines)
+
+    # 1. Update latest checkpoint
+    tool_remember({
+        "key": f"{project}-checkpoint-latest",
+        "content": checkpoint_content,
+        "category": "decision",
+        "project": project,
+        "tags": "checkpoint, latest, zero_compaction"
+    })
+
+    # 2. Archive historical checkpoint
+    ts_slug = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tool_remember({
+        "key": f"{project}-checkpoint-{ts_slug}",
+        "content": checkpoint_content,
+        "category": "decision",
+        "project": project,
+        "tags": "checkpoint, history"
+    })
+
+    # 3. Notify team collab bus if available
+    team_db_path = Path(os.environ.get("OPENCODE_TEAM_DB", Path.home() / ".opencode" / "team" / "team_collab.db"))
+    if team_db_path.exists():
+        try:
+            conn = sqlite3.connect(str(team_db_path))
+            conn.execute("""
+                INSERT INTO team_messages (sender, message, category, priority, project, created_at)
+                VALUES (?, ?, 'announcement', 'high', ?, ?)
+            """, ("orchestrator", f"💾 Checkpoint de Contexto Persistente guardado: {summary[:120]}", project, now_utc))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+    return f"✓ Milestone Checkpoint persisted for [{project}]! Saved as '{project}-checkpoint-latest' and visible in GetBrain Graph."
+
+def tool_get_session_checkpoint(args):
+    project = get_current_project(args.get("project"))
+    conn = get_db()
+    cur = conn.execute("""
+        SELECT key, category, content, updated_at
+        FROM memories
+        WHERE project = ? AND (key = ? OR key LIKE ? OR tags LIKE '%checkpoint%')
+        ORDER BY (key = ?) DESC, updated_at DESC
+        LIMIT 1
+    """, (project, f"{project}-checkpoint-latest", f"{project}-checkpoint-%", f"{project}-checkpoint-latest"))
+    row = cur.fetchone()
+    if row:
+        return f"=== LATEST SESSION CHECKPOINT [{project}] (Updated: {row['updated_at']}) ===\n\n{row['content']}"
+    return f"No persistent session checkpoint found for project [{project}]. You can create one anytime with 'checkpoint_session'."
+
+def tool_auto_sync_project_memory(args):
+    project = get_current_project(args.get("project"))
+    w_dir = args.get("workspace_dir") or os.getcwd()
+    p = Path(w_dir).resolve()
+
+    detected_tech = []
+    detected_notes = []
+
+    # 1. Package.json inspection
+    pkg_json = p / "package.json"
+    if pkg_json.is_file():
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+            frameworks = []
+            if "next" in deps: frameworks.append(f"Next.js {deps['next']}")
+            if "react" in deps: frameworks.append(f"React {deps['react']}")
+            if "tailwindcss" in deps or "@tailwindcss/postcss" in deps: frameworks.append("Tailwind CSS")
+            if "@prisma/client" in deps or "prisma" in deps: frameworks.append("Prisma ORM")
+            if "express" in deps: frameworks.append("Express")
+            if "vite" in deps: frameworks.append("Vite")
+            if "typescript" in deps: frameworks.append("TypeScript")
+            if "vitest" in deps or "jest" in deps: frameworks.append("Vitest/Jest")
+            if frameworks:
+                detected_tech.append(f"Node.js/TS: {', '.join(frameworks)}")
+        except Exception:
+            pass
+
+    # 2. Python inspection
+    req_txt = p / "requirements.txt"
+    pyproject = p / "pyproject.toml"
+    if req_txt.is_file() or pyproject.is_file():
+        detected_tech.append("Python 3 environment")
+
+    # 3. Prisma inspection
+    prisma_schema = p / "prisma" / "schema.prisma"
+    if prisma_schema.is_file():
+        try:
+            content = prisma_schema.read_text(encoding="utf-8")
+            models = [line.split()[1] for line in content.splitlines() if line.strip().startswith("model ")]
+            if models:
+                detected_notes.append(f"Prisma Models ({len(models)}): {', '.join(models[:8])}")
+        except Exception:
+            pass
+
+    # 4. Git info
+    try:
+        branch = subprocess.check_output(["git", "-C", str(p), "branch", "--show-current"], text=True, stderr=subprocess.DEVNULL).strip()
+        if branch:
+            detected_notes.append(f"Active Git branch: '{branch}'")
+    except Exception:
+        pass
+
+    synced = []
+    if detected_tech:
+        stack_str = " | ".join(detected_tech)
+        tool_remember({
+            "key": f"{project}-tech-stack",
+            "content": stack_str,
+            "category": "architecture",
+            "project": project,
+            "tags": "auto_detected, tech_stack, setup"
+        })
+        synced.append("tech stack")
+
+    if detected_notes:
+        notes_str = "\n".join(f"• {n}" for n in detected_notes)
+        tool_remember({
+            "key": f"{project}-architecture-overview",
+            "content": notes_str,
+            "category": "architecture",
+            "project": project,
+            "tags": "auto_detected, architecture, models"
+        })
+        synced.append("architecture overview")
+
+    return f"✓ Auto-synced persistent memory for [{project}]: {', '.join(synced) if synced else 'Workspace verified'}."
+
 TOOL_HANDLERS = {
     "remember": tool_remember,
     "recall": tool_recall,
@@ -446,6 +643,9 @@ TOOL_HANDLERS = {
     "get_active_context": tool_get_active_context,
     "get_session_bootstrap": tool_get_session_bootstrap,
     "sync_project_context": tool_sync_project_context,
+    "checkpoint_session": tool_checkpoint_session,
+    "get_session_checkpoint": tool_get_session_checkpoint,
+    "auto_sync_project_memory": tool_auto_sync_project_memory,
 }
 
 # MCP JSON-RPC Stdio Loop

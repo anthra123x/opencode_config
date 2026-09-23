@@ -245,12 +245,29 @@ ecc web --open
    - **Contratos & Memorias**: Explorador de especificaciones de API, esquemas y decisiones de arquitectura guardadas en SQLite FTS5.
 
 2. **GetBrain Knowledge Graph (Pestaña 2 - `http://localhost:<puerto>/#brain`)**:
+   - **Escáner de Arquitectura Multi-Capa**: Analiza en profundidad la estructura de código real del proyecto en curso (manifiestos, modelos Prisma/SQL, componentes UI, rutas API, servicios y suites de tests), vinculándolos dinámicamente con las decisiones tomadas en memoria.
    - **Motor de Física 2D Interactivo**: Visualizador en Canvas HTML5 con simulación de fuerzas gravitatorias y resortes, auto-ajuste de escala y partículas de energía que fluyen por los enlaces activos.
-   - **Grafo Sintetizado Automáticamente**: Escanea el espacio de trabajo del proyecto actual y conecta Agentes, Tareas, Contratos publicados, Decisiones de memoria y Archivos de código reales del proyecto:
-     $$\text{Agente} \xrightarrow{\text{trabaja en}} \text{Tarea} \xrightarrow{\text{impacta}} \text{Módulo del Proyecto}$$
-     $$\text{Backend} \xrightarrow{\text{publicó}} \text{Contrato API} \xrightarrow{\text{consumido por}} \text{Frontend}$$
+   - **Botón `💾 Checkpoint`**: Permite congelar un punto de control de contexto en cualquier momento, guardando el estado y decisiones en SQLite sin pérdida de contexto.
+   - **Botón `🔄 Escanear`**: Re-analiza la base de código del proyecto activo y sincroniza automáticamente las dependencias y tecnologías detectadas.
    - **Inspector Lateral de Nodos**: Haz clic en cualquier nodo para ver su especificación técnica, contenido completo, creador y conexiones vinculadas.
-   - **Filtros Dinámicos & Búsqueda**: Filtra por tipo de nodo (Agentes, Tareas, Contratos, Memorias, Código) o busca por nombre.
+   - **Filtros Dinámicos & Búsqueda**: Filtra por tipo de nodo (Agentes, Tareas, Contratos, Memorias/Checkpoints, Código) o busca por nombre.
+
+---
+
+## ⚡ Motor Zero-Compaction & Persistencia de Memoria de Contexto
+
+Uno de los problemas más comunes en sesiones largas con modelos de lenguaje es la **compactación destructiva de contexto**, donde OpenCode trunca o resume agresivamente los mensajes anteriores perdiendo detalles de rutas de archivos, esquemas y decisiones tomadas.
+
+OpenCode Swarm soluciona esto con una arquitectura **Zero-Compaction** nativa:
+
+1. **Desactivación de Compactación Destructiva**:
+   En `config/opencode.jsonc`, se configura `"compaction": { "auto": false, "tail_turns": 80 }`. OpenCode no compacta de manera forzada el historial de turnos.
+2. **Checkpoints de Sesión (`checkpoint_session`)**:
+   Los agentes o el usuario (desde la UI web) guardan puntos de control estructurados con resumen de avances, decisiones tomadas, tarea activa, próximos pasos y archivos modificados.
+3. **Reanudación Instantánea (`get_session_checkpoint`)**:
+   Cualquier agente que retoma el proyecto recupera el último checkpoint con 100% de fidelidad sin necesidad de cargar cientos de mensajes en el contexto conversacional.
+4. **Sincronización Automática (`auto_sync_project_memory`)**:
+   Detecta automáticamente el framework, librerías y modelos del proyecto persistiendo el mapa arquitectónico en SQLite FTS5.
 
 ---
 

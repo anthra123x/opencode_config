@@ -854,9 +854,34 @@ async function scanCodebase() {
     const res = await fetch('/api/brain/scan', { method: 'POST' });
     const data = await res.json();
     state.brain = data;
+    const countEl = document.getElementById('brainNodesCount');
+    if (countEl) countEl.textContent = data.nodes ? data.nodes.length : 0;
     setupBrainSimulation(data.nodes, data.links);
   } catch (err) {
     console.error('Scan codebase error:', err);
+  }
+}
+
+async function createMemoryCheckpoint() {
+  const summary = prompt('Resumen del Checkpoint de Contexto Persistente:', 'Punto de control de arquitectura y avances del proyecto');
+  if (!summary) return;
+  try {
+    const res = await fetch('/api/brain/checkpoint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ summary, decisions: 'Guardado manualmente desde GetBrain Cockpit' })
+    });
+    const data = await res.json();
+    if (data.brain) {
+      state.brain = data.brain;
+      const countEl = document.getElementById('brainNodesCount');
+      if (countEl) countEl.textContent = data.brain.nodes ? data.brain.nodes.length : 0;
+      setupBrainSimulation(data.brain.nodes, data.brain.links);
+    }
+    alert('💾 Checkpoint de memoria persistente guardado exitosamente.\nContexto protegido en SQLite (zero-loss).');
+  } catch (err) {
+    console.error('Error creating memory checkpoint:', err);
+    alert('Error al guardar checkpoint: ' + err.message);
   }
 }
 

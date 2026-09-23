@@ -48,7 +48,7 @@
     }
   },
   "compaction": {
-    "auto": true,
-    "tail_turns": 30
+    "auto": false,
+    "tail_turns": 80
   }
 }

@@ -40,11 +40,25 @@ Todos los agentes especializados (`@orchestrator`, `@backend`, `@frontend`, `@gi
 
 ---
 
-## 2. Persistent Context Memory Protocol (`context-memory`)
+## 2. Persistent Context Memory Protocol (`context-memory` + `GetBrain`)
 
-La memoria persistente permite conservar contexto, reglas de negocio, preferencias del usuario y decisiones arquitectónicas a través de diferentes sesiones y proyectos.
+La memoria persistente permite conservar contexto, reglas de negocio, preferencias del usuario y decisiones arquitectónicas a través de diferentes sesiones y proyectos, eliminando la necesidad de compactación destructiva de contexto en OpenCode (`compaction.auto = false`).
 
-### Prioridad de Consulta:
+### Puntos de Control y Cero Compactación:
+1. **Checkpointing de Sesión (`checkpoint_session`)**:
+   - Cada agente especializado debe registrar un checkpoint ante hitos mayores o antes de ceder el turno:
+     ```python
+     checkpoint_session(project=..., summary="...", decisions="...", active_task="...", next_steps="...", files_modified="...")
+     ```
+   - Este checkpoint se guarda en SQLite indexado y se refleja inmediatamente como un nodo `memory` destacado en el grafo visual GetBrain.
+2. **Hidratación al Reanudar (`get_session_checkpoint`)**:
+   - Para no saturar el historial de chat con cientos de mensajes previos, ejecuta:
+     ```python
+     get_session_checkpoint(project=...)
+     ```
+   - Recupera el estado exacto del proyecto, archivos modificados y próximos pasos con 100% de fidelidad.
+
+### Prioridad de Consulta Habitual:
 1. Al comenzar una sesión o recibir una instrucción compleja:
    ```python
    get_active_context(project="global")

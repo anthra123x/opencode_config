@@ -49,6 +49,27 @@ team_spec = importlib.util.spec_from_file_location("team_collab_server", str(tea
 team_server = importlib.util.module_from_spec(team_spec)
 team_spec.loader.exec_module(team_server)
 
+# Dynamically locate and load context-memory MCP server module
+possible_mem_paths = [
+    SERVER_DIR.parent / "mcp" / "context-memory" / "server.py",
+    Path.home() / ".config" / "opencode" / "mcp" / "context-memory" / "server.py",
+    Path("/home/omicron/Documentos/opencodeconfig/mcp/context-memory/server.py")
+]
+mem_server_path = None
+for p in possible_mem_paths:
+    if p.exists():
+        mem_server_path = p
+        break
+
+mem_server = None
+if mem_server_path:
+    try:
+        mem_spec = importlib.util.spec_from_file_location("context_memory_server", str(mem_server_path))
+        mem_server = importlib.util.module_from_spec(mem_spec)
+        mem_spec.loader.exec_module(mem_server)
+    except Exception:
+        pass
+
 # Add web directory to path for brain_builder
 sys.path.insert(0, str(SERVER_DIR))
 import brain_builder
@@ -350,8 +371,57 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
         if url == "/api/brain/scan":
             proj = self.server.project_name
             proj_dir = str(self.server.project_dir)
+            if mem_server:
+                try:
+                    mem_server.tool_auto_sync_project_memory({"project": proj, "workspace_dir": proj_dir})
+                except Exception:
+                    pass
             brain_data = brain_builder.build_project_brain(proj, proj_dir)
             self._send_json(brain_data)
+            return
+
+        if url == "/api/brain/checkpoint":
+            proj = self.server.project_name
+            proj_dir = str(self.server.project_dir)
+            summary = body.get("summary", "Checkpoint manual desde GetBrain Cockpit").strip()
+            decisions = body.get("decisions", "").strip()
+            next_steps = body.get("next_steps", "").strip()
+            active_task = body.get("active_task", "").strip()
+            files_mod = body.get("files_modified", "").strip()
+
+            msg = "Checkpoint saved"
+            if mem_server:
+                try:
+                    msg = mem_server.tool_checkpoint_session({
+                        "project": proj,
+                        "summary": summary,
+                        "decisions": decisions,
+                        "active_task": active_task,
+                        "next_steps": next_steps,
+                        "files_modified": files_mod
+                    })
+                except Exception as e:
+                    msg = f"Error saving checkpoint: {e}"
+
+            brain_data = brain_builder.build_project_brain(proj, proj_dir)
+            self._send_json({"success": True, "message": msg, "brain": brain_data})
+            return
+
+        if url == "/api/brain/sync":
+            proj = self.server.project_name
+            proj_dir = str(self.server.project_dir)
+            msg = "Context synced"
+            if mem_server:
+                try:
+                    msg = mem_server.tool_auto_sync_project_memory({
+                        "project": proj,
+                        "workspace_dir": proj_dir
+                    })
+                except Exception as e:
+                    msg = f"Error syncing: {e}"
+
+            brain_data = brain_builder.build_project_brain(proj, proj_dir)
+            self._send_json({"success": True, "message": msg, "brain": brain_data})
             return
 
         self._send_json({"error": "Not Found"}, status=404)

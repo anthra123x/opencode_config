@@ -51,5 +51,37 @@ class TestContextMemoryServer(unittest.TestCase):
         self.assertIn("Next.js 15", bootstrap)
         self.assertIn("Team Board Status", bootstrap)
 
+    def test_checkpoint_session_and_retrieval(self):
+        res = server.tool_checkpoint_session({
+            "project": "app-x",
+            "summary": "Completed authentication module and JWT validation middleware",
+            "decisions": "Adopted RSA-256 with key rotation",
+            "files_modified": "src/lib/auth.ts, src/middleware.ts",
+            "next_steps": "Write E2E tests for login flow"
+        })
+        self.assertIn("Milestone Checkpoint persisted", res)
+
+        checkpoint = server.tool_get_session_checkpoint({"project": "app-x"})
+        self.assertIn("LATEST SESSION CHECKPOINT", checkpoint)
+        self.assertIn("Completed authentication module", checkpoint)
+        self.assertIn("Adopted RSA-256", checkpoint)
+        self.assertIn("Write E2E tests", checkpoint)
+
+    def test_auto_sync_project_memory(self):
+        with tempfile.TemporaryDirectory() as td:
+            pkg = Path(td) / "package.json"
+            pkg.write_text('{"dependencies": {"next": "15.0", "react": "19.0"}}', encoding="utf-8")
+
+            res = server.tool_auto_sync_project_memory({
+                "project": "temp-app",
+                "workspace_dir": td
+            })
+            self.assertIn("Auto-synced persistent memory", res)
+
+            # Check that memories exist
+            mem = server.tool_recall({"query": "Next.js", "project": "temp-app"})
+            self.assertIn("tech-stack", mem)
+            self.assertIn("React", mem)
+
 if __name__ == "__main__":
     unittest.main()

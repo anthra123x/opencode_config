@@ -108,16 +108,42 @@ Para evitar que OpenCode se cuelgue o lance errores como `database is locked` cu
 
 ---
 
-## 4. Memoria Persistente de Contexto (`context-memory`)
+## 4. Memoria Persistente de Contexto y Motor Zero-Compaction (`context-memory` + `GetBrain`)
 
-Para evitar que el usuario tenga que repetir sus preferencias o decisiones arquitectónicas en cada sesión:
-1. **Decisiones Clave**: Cuando se tome una decisión estructural (ej: "usar PostgreSQL con Prisma", "autenticación mediante cookies HTTP-only"), regístrala con:
+Para evitar la pérdida de información crítica por compactación destructiva de tokens en OpenCode, se implementa una arquitectura **Zero-Compaction**:
+- **Compaginar sin Pérdida**: En `opencode.jsonc`, `"compaction": { "auto": false }`. La memoria conversacional no se trunca ni se compacta agresivamente.
+- **Persistencia en SQLite FTS5**: Las decisiones arquitectónicas, estado de archivos y próximos pasos se guardan persistentemente en base de datos indexada con búsqueda vectorial y textual completa.
+
+### Protocolo de Persistencia y Checkpoints:
+1. **Puntos de Control de Sesión (`checkpoint_session`)**:
+   Antes de terminar un turno mayor o al completar un hito, guarda un checkpoint:
    ```python
-   remember(key="auth-strategy", content="Cookies HTTP-only con JWT firmados", category="architecture")
+   checkpoint_session(
+       project="mi-proyecto",
+       summary="Autenticación JWT y modelos Prisma completados",
+       decisions="Se utilizó bcrypt para hashing y cookies HttpOnly con SameSite=Strict",
+       active_task="Integrar middleware de autorización en rutas protegidas",
+       next_steps="1. Crear test unitario en vitest\n2. Conectar frontend hook useAuth",
+       files_modified="prisma/schema.prisma, src/lib/auth.ts, src/middleware.ts"
+   )
    ```
-2. **Consultar Memoria**: Antes de implementar, consulta si ya existe una regla acordada:
+2. **Reanudación Instantánea (`get_session_checkpoint`)**:
+   Al iniciar una sesión o reanudar trabajo en cualquier ventana, recupera el último checkpoint:
    ```python
-   recall(query="auth cookies", category="architecture")
+   get_session_checkpoint(project="mi-proyecto")
+   ```
+3. **Decisiones Clave Individuales (`remember`)**:
+   ```python
+   remember(key="auth-strategy", content="Cookies HTTP-only con JWT firmados", category="architecture", project="mi-proyecto")
+   ```
+4. **Consultar Memoria Histórica (`recall`)**:
+   ```python
+   recall(query="auth cookies", category="architecture", project="mi-proyecto")
+   ```
+5. **Sincronización Automática con GetBrain (`auto_sync_project_memory`)**:
+   Inspecciona frameworks, dependencias y esquemas de base de datos para auto-generar la base de conocimiento del proyecto:
+   ```python
+   auto_sync_project_memory(project="mi-proyecto", workspace_dir="/ruta/al/proyecto")
    ```
 
 ---
