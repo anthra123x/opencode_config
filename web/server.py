@@ -147,20 +147,37 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
             proj_dir = str(self.server.project_dir)
             branch = self.server.get_branch()
             conn = team_server.get_db()
-            cur = conn.execute("""
-                SELECT agent_name, status, current_task, blockers, window_id, last_heartbeat, updated_at
-                FROM team_agents
-                WHERE project = ? OR project = 'default'
-                ORDER BY agent_name
-            """, (proj,))
-            agents = [dict(r) for r in cur.fetchall()]
+            try:
+                cur = conn.execute("""
+                    SELECT agent_name, status, current_task, blockers, window_id, last_heartbeat, updated_at
+                    FROM team_agents
+                    WHERE project = ? OR project = 'default'
+                    ORDER BY agent_name
+                """, (proj,))
+                agents = [dict(r) for r in cur.fetchall()]
 
-            for a in agents:
-                time_val = a["last_heartbeat"] or a["updated_at"]
-                a["relative_time"] = team_server.format_relative_time(time_val)
+                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                for a in agents:
+                    time_val = a["last_heartbeat"] or a["updated_at"]
+                    a["relative_time"] = team_server.format_relative_time(time_val)
+                    if a.get("status") == "working" and time_val:
+                        try:
+                            t = datetime.datetime.fromisoformat(time_val)
+                            if t.tzinfo is None:
+                                t = t.replace(tzinfo=datetime.timezone.utc)
+                            if (now_utc - t).total_seconds() > 180:
+                                a["status"] = "idle"
+                                a["relative_time"] = f"{a['relative_time']} (inactivo)"
+                        except Exception:
+                            pass
 
-            cur_tasks = conn.execute("SELECT COUNT(*) FROM team_tasks WHERE project = ? AND status = 'in_progress'", (proj,))
-            in_prog_count = cur_tasks.fetchone()[0]
+                cur_tasks = conn.execute("SELECT COUNT(*) FROM team_tasks WHERE project = ? AND status = 'in_progress'", (proj,))
+                in_prog_count = cur_tasks.fetchone()[0]
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
             self._send_json({
                 "project": proj,
@@ -176,15 +193,21 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
         if url == "/api/tasks":
             proj = self.server.project_name
             conn = team_server.get_db()
-            cur = conn.execute("""
-                SELECT id, title, description, assigned_to, status, priority, notes, updated_at
-                FROM team_tasks
-                WHERE project = ?
-                ORDER BY id DESC
-            """, (proj,))
-            tasks = [dict(r) for r in cur.fetchall()]
-            for t in tasks:
-                t["relative_time"] = team_server.format_relative_time(t["updated_at"])
+            try:
+                cur = conn.execute("""
+                    SELECT id, title, description, assigned_to, status, priority, notes, updated_at
+                    FROM team_tasks
+                    WHERE project = ?
+                    ORDER BY id DESC
+                """, (proj,))
+                tasks = [dict(r) for r in cur.fetchall()]
+                for t in tasks:
+                    t["relative_time"] = team_server.format_relative_time(t["updated_at"])
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
             self._send_json({
                 "project": proj,
@@ -196,15 +219,21 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
         if url == "/api/artifacts":
             proj = self.server.project_name
             conn = team_server.get_db()
-            cur = conn.execute("""
-                SELECT artifact_key, title, creator, artifact_type, content, updated_at
-                FROM team_artifacts
-                WHERE project = ? OR project = 'default'
-                ORDER BY updated_at DESC
-            """, (proj,))
-            artifacts = [dict(r) for r in cur.fetchall()]
-            for art in artifacts:
-                art["relative_time"] = team_server.format_relative_time(art["updated_at"])
+            try:
+                cur = conn.execute("""
+                    SELECT artifact_key, title, creator, artifact_type, content, updated_at
+                    FROM team_artifacts
+                    WHERE project = ? OR project = 'default'
+                    ORDER BY updated_at DESC
+                """, (proj,))
+                artifacts = [dict(r) for r in cur.fetchall()]
+                for art in artifacts:
+                    art["relative_time"] = team_server.format_relative_time(art["updated_at"])
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
             self._send_json({
                 "project": proj,
@@ -219,14 +248,19 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
             conn = brain_builder.get_db_connection(mem_db_path)
             memories = []
             if conn:
-                cur = conn.execute("""
-                    SELECT id, key, category, content, tags, project, updated_at
-                    FROM memories
-                    WHERE project = ? OR project = 'global'
-                    ORDER BY updated_at DESC
-                """, (proj,))
-                memories = [dict(r) for r in cur.fetchall()]
-                conn.close()
+                try:
+                    cur = conn.execute("""
+                        SELECT id, key, category, content, tags, project, updated_at
+                        FROM memories
+                        WHERE project = ? OR project = 'global'
+                        ORDER BY updated_at DESC
+                    """, (proj,))
+                    memories = [dict(r) for r in cur.fetchall()]
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
 
             self._send_json({
                 "project": proj,
@@ -238,15 +272,21 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
         if url == "/api/feed":
             proj = self.server.project_name
             conn = team_server.get_db()
-            cur = conn.execute("""
-                SELECT id, sender, message, category, priority, created_at
-                FROM team_messages
-                WHERE project = ? OR project = 'default'
-                ORDER BY id DESC LIMIT 25
-            """, (proj,))
-            feed = [dict(r) for r in cur.fetchall()]
-            for m in feed:
-                m["relative_time"] = team_server.format_relative_time(m["created_at"])
+            try:
+                cur = conn.execute("""
+                    SELECT id, sender, message, category, priority, created_at
+                    FROM team_messages
+                    WHERE project = ? OR project = 'default'
+                    ORDER BY id DESC LIMIT 25
+                """, (proj,))
+                feed = [dict(r) for r in cur.fetchall()]
+                for m in feed:
+                    m["relative_time"] = team_server.format_relative_time(m["created_at"])
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
             self._send_json({
                 "project": proj,
@@ -277,35 +317,53 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
             try:
                 while True:
                     conn = team_server.get_db()
-                    cur_ag = conn.execute("""
-                        SELECT agent_name, status, current_task, blockers, window_id, last_heartbeat, updated_at
-                        FROM team_agents
-                        WHERE project = ? OR project = 'default'
-                        ORDER BY agent_name
-                    """, (proj,))
-                    agents = [dict(r) for r in cur_ag.fetchall()]
-                    for a in agents:
-                        a["relative_time"] = team_server.format_relative_time(a["last_heartbeat"] or a["updated_at"])
+                    try:
+                        cur_ag = conn.execute("""
+                            SELECT agent_name, status, current_task, blockers, window_id, last_heartbeat, updated_at
+                            FROM team_agents
+                            WHERE project = ? OR project = 'default'
+                            ORDER BY agent_name
+                        """, (proj,))
+                        agents = [dict(r) for r in cur_ag.fetchall()]
+                        now_utc = datetime.datetime.now(datetime.timezone.utc)
+                        for a in agents:
+                            time_val = a["last_heartbeat"] or a["updated_at"]
+                            a["relative_time"] = team_server.format_relative_time(time_val)
+                            if a.get("status") == "working" and time_val:
+                                try:
+                                    t = datetime.datetime.fromisoformat(time_val)
+                                    if t.tzinfo is None:
+                                        t = t.replace(tzinfo=datetime.timezone.utc)
+                                    if (now_utc - t).total_seconds() > 180:
+                                        a["status"] = "idle"
+                                        a["relative_time"] = f"{a['relative_time']} (inactivo)"
+                                except Exception:
+                                    pass
 
-                    cur_msg = conn.execute("""
-                        SELECT id, sender, message, category, priority, created_at
-                        FROM team_messages
-                        WHERE project = ? OR project = 'default'
-                        ORDER BY id DESC LIMIT 10
-                    """, (proj,))
-                    messages = [dict(r) for r in cur_msg.fetchall()]
-                    for m in messages:
-                        m["relative_time"] = team_server.format_relative_time(m["created_at"])
+                        cur_msg = conn.execute("""
+                            SELECT id, sender, message, category, priority, created_at
+                            FROM team_messages
+                            WHERE project = ? OR project = 'default'
+                            ORDER BY id DESC LIMIT 10
+                        """, (proj,))
+                        messages = [dict(r) for r in cur_msg.fetchall()]
+                        for m in messages:
+                            m["relative_time"] = team_server.format_relative_time(m["created_at"])
 
-                    cur_tasks = conn.execute("""
-                        SELECT id, title, description, assigned_to, status, priority, notes, updated_at
-                        FROM team_tasks
-                        WHERE project = ?
-                        ORDER BY id DESC LIMIT 15
-                    """, (proj,))
-                    tasks = [dict(r) for r in cur_tasks.fetchall()]
-                    for t in tasks:
-                        t["relative_time"] = team_server.format_relative_time(t["updated_at"])
+                        cur_tasks = conn.execute("""
+                            SELECT id, title, description, assigned_to, status, priority, notes, updated_at
+                            FROM team_tasks
+                            WHERE project = ?
+                            ORDER BY id DESC LIMIT 15
+                        """, (proj,))
+                        tasks = [dict(r) for r in cur_tasks.fetchall()]
+                        for t in tasks:
+                            t["relative_time"] = team_server.format_relative_time(t["updated_at"])
+                    finally:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
 
                     snapshot = {
                         "project": proj,
@@ -318,10 +376,16 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
                     }
                     data_str = json.dumps(snapshot, ensure_ascii=False)
 
-                    self.wfile.write(f"data: {data_str}\n\n".encode("utf-8"))
-                    self.wfile.flush()
+                    try:
+                        self.wfile.write(f"data: {data_str}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                    except (BrokenPipeError, ConnectionResetError, OSError):
+                        return
+
                     time.sleep(2)
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
+            except Exception:
                 return
             return
 

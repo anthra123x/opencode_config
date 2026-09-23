@@ -233,6 +233,18 @@ TOOLS = [
                 "workspace_dir": {"type": "string", "description": "Project root directory (optional)"}
             }
         }
+    },
+    {
+        "name": "trigger_auto_checkpoint",
+        "description": "Trigger an automatic, silent zero-compaction session checkpoint following a project milestone (task finished, contract shared, or handoff). Debounced.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project identifier (optional)"},
+                "event_type": {"type": "string", "description": "Event type (e.g. 'task_completed', 'artifact_published', 'handoff')"},
+                "details": {"type": "string", "description": "Short description of the event or milestone"}
+            }
+        }
     }
 ]
 
@@ -542,6 +554,33 @@ def tool_checkpoint_session(args):
 
     return f"✓ Milestone Checkpoint persisted for [{project}]! Saved as '{project}-checkpoint-latest' and visible in GetBrain Graph."
 
+LAST_AUTO_CHECKPOINT = {}
+
+def auto_checkpoint(project, event_type="milestone", details=""):
+    """
+    Debounced automatic checkpoint generator for zero-compaction context persistence.
+    Called on task completion, artifact sharing, or formal handoffs.
+    """
+    now_ts = time.time()
+    last_ts = LAST_AUTO_CHECKPOINT.get(project, 0)
+    if (now_ts - last_ts) < 15:
+        return f"Debounced: recent checkpoint recorded {int(now_ts - last_ts)}s ago."
+    LAST_AUTO_CHECKPOINT[project] = now_ts
+
+    summary = f"Checkpoint automático por {event_type}: {details}".strip()
+    return tool_checkpoint_session({
+        "project": project,
+        "summary": summary,
+        "active_task": details[:120] if details else f"Auto milestone: {event_type}",
+        "decisions": f"Snapshot de persistencia generado automáticamente por evento '{event_type}'."
+    })
+
+def tool_trigger_auto_checkpoint(args):
+    project = get_current_project(args.get("project"))
+    event_type = args.get("event_type", "milestone")
+    details = args.get("details", "").strip()
+    return auto_checkpoint(project, event_type, details)
+
 def tool_get_session_checkpoint(args):
     project = get_current_project(args.get("project"))
     conn = get_db()
@@ -646,6 +685,7 @@ TOOL_HANDLERS = {
     "checkpoint_session": tool_checkpoint_session,
     "get_session_checkpoint": tool_get_session_checkpoint,
     "auto_sync_project_memory": tool_auto_sync_project_memory,
+    "trigger_auto_checkpoint": tool_trigger_auto_checkpoint,
 }
 
 # MCP JSON-RPC Stdio Loop

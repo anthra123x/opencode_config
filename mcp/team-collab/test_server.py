@@ -151,5 +151,88 @@ class TestTeamCollabServer(unittest.TestCase):
         feed = server.tool_team_read_feed({"limit": 50, "project": "concurrency-test"})
         self.assertIn("=== Team Activity Feed [concurrency-test]", feed)
 
+    def test_reactive_cross_agent_trigger(self):
+        # Backend shares API spec contract
+        share_res = server.tool_team_share_artifact({
+            "creator": "backend",
+            "artifact_key": "cart-api-contract",
+            "title": "Cart & Checkout REST API Spec",
+            "artifact_type": "api_spec",
+            "content": "POST /api/v1/cart { items: [] }",
+            "project": "project-reactive"
+        })
+        self.assertIn("Reactive trigger dispatched to @frontend", share_res)
+
+        # Check that frontend has pending triggers
+        triggers_res = server.tool_team_check_triggers({
+            "agent_name": "frontend",
+            "project": "project-reactive",
+            "claim": True
+        })
+        self.assertIn("cart-api-contract", triggers_res)
+        self.assertIn("claimed", triggers_res)
+
+        # Verify frontend status is working on trigger
+        status_res = server.tool_team_get_status({"project": "project-reactive"})
+        self.assertIn("@frontend", status_res)
+        self.assertIn("WORKING", status_res)
+
+    def test_project_isolated_agent_status(self):
+        # Backend working in Project 1
+        server.tool_team_set_status({
+            "agent_name": "backend",
+            "status": "working",
+            "current_task": "Building DB models in Project 1",
+            "project": "project-1"
+        })
+
+        # Backend idle in Project 2
+        server.tool_team_set_status({
+            "agent_name": "backend",
+            "status": "idle",
+            "current_task": "",
+            "project": "project-2"
+        })
+
+        # Project 1 should still show backend working
+        st1 = server.tool_team_get_status({"project": "project-1"})
+        self.assertIn("WORKING", st1)
+        self.assertIn("Building DB models in Project 1", st1)
+
+        # Project 2 should show backend idle
+        st2 = server.tool_team_get_status({"project": "project-2"})
+        self.assertIn("IDLE", st2)
+
+    def test_task_completion_sets_agent_idle(self):
+        # Post and claim task for qa-auditor
+        server.tool_team_post_task({
+            "title": "Verify OWASP and Test Coverage",
+            "assigned_to": "qa-auditor",
+            "project": "project-audit"
+        })
+        cur = server.get_db().execute("SELECT id FROM team_tasks WHERE project = 'project-audit' ORDER BY id DESC LIMIT 1")
+        task_id = cur.fetchone()["id"]
+
+        server.tool_team_claim_task({
+            "task_id": task_id,
+            "agent_name": "qa-auditor",
+            "project": "project-audit"
+        })
+        st_working = server.tool_team_get_status({"project": "project-audit"})
+        self.assertIn("WORKING", st_working)
+
+        # Mark task completed
+        update_res = server.tool_team_update_task({
+            "task_id": task_id,
+            "status": "completed",
+            "notes": "100% tests passing, zero vulnerabilities"
+        })
+        self.assertIn("COMPLETED", update_res)
+
+        # Verify qa-auditor automatically transitioned to IDLE
+        st_idle = server.tool_team_get_status({"project": "project-audit"})
+        self.assertIn("IDLE", st_idle)
+
 if __name__ == "__main__":
     unittest.main()
+

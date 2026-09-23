@@ -106,12 +106,30 @@ Para evitar que OpenCode se cuelgue o lance errores como `database is locked` cu
 - **Dentro de OpenCode**: Ejecutar el comando `/live` en cualquier sesión.
 - **En terminal independiente o tmux split**: Ejecutar `ecc live --watch` para ver la actividad de todas las ventanas actualizándose en tiempo real cada 2 segundos.
 
+### D. Sistema de Disparadores Reactivos Cross-Agent (Backend ➔ Frontend)
+Para que los agentes trabajen de forma reactiva y encadenada sin esperar a que el usuario redacte órdenes manuales:
+1. **Disparo Automático al Publicar Contratos**:
+   - Cuando `@backend` comparte un artefacto de tipo `api_spec`, `schema` o `database` mediante `team_share_artifact`, el sistema registra de inmediato un disparador en `team_triggers`.
+   - `@frontend` se marca automáticamente en estado `WORKING` en el Cockpit Web con la tarea: `⚡ Triggered by @backend: Consume contract <key>`.
+2. **Consumo Inmediato por el Frontend**:
+   - Al iniciar su turno o conmutar con `TAB`, `@frontend` llama a:
+     ```python
+     team_check_triggers(agent_name="frontend")
+     ```
+   - Recupera el contrato exacto, la especificación y comienza la implementación de los componentes UI de inmediato.
+3. **Disparadores Manuales Dirigidos**:
+   - Cualquier agente puede emitir un trigger explícito a otro especialista:
+     ```python
+     team_trigger_agent(from_agent="frontend", to_agent="qa-auditor", trigger_type="review", artifact_key="ui-spec", summary="Auditar tests y accesibilidad de la UI")
+     ```
+
 ---
 
 ## 4. Memoria Persistente de Contexto y Motor Zero-Compaction (`context-memory` + `GetBrain`)
 
 Para evitar la pérdida de información crítica por compactación destructiva de tokens en OpenCode, se implementa una arquitectura **Zero-Compaction**:
 - **Compaginar sin Pérdida**: En `opencode.jsonc`, `"compaction": { "auto": false }`. La memoria conversacional no se trunca ni se compacta agresivamente.
+- **Checkpoints Automáticos Silenciosos**: El sistema guarda snapshots de forma automática y debounced cada vez que se completa una tarea (`team_update_task`), se publica un contrato (`team_share_artifact`) o se realiza un handoff (`team_handoff`), reflejándolos de inmediato en GetBrain sin que el usuario tenga que hacerlo manualmente.
 - **Persistencia en SQLite FTS5**: Las decisiones arquitectónicas, estado de archivos y próximos pasos se guardan persistentemente en base de datos indexada con búsqueda vectorial y textual completa.
 
 ### Protocolo de Persistencia y Checkpoints:

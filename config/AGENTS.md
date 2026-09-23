@@ -21,12 +21,20 @@ Todos los agentes especializados (`@orchestrator`, `@backend`, `@frontend`, `@gi
      ```
      o emite pulsos de vida con `team_heartbeat(agent_name="backend", window_id="win-backend")`.
 
-3. **Handoffs y Contratos entre Agentes**:
-   - Cuando `@backend` termine un modelo de datos o endpoints, DEBE compartir el contrato antes de que `@frontend` empiece a consumir endpoints ciegamente:
+3. **Handoffs, Contratos y Disparadores Reactivos (Backend ➔ Frontend)**:
+   - Cuando `@backend` termine un modelo de datos o endpoints, publica el contrato:
      ```python
      team_share_artifact(creator="backend", artifact_key="auth-api-v1", title="Auth Endpoints Contract", artifact_type="api_spec", content="...")
      ```
-   - `@frontend` en su ventana detecta el contrato inmediatamente y lo recupera usando `team_get_artifact(artifact_key="auth-api-v1")`.
+   - `team-collab` genera de inmediato un disparador reactivo en `team_triggers` y marca a `@frontend` como activo.
+   - `@frontend` consume sus disparadores pendientes con:
+     ```python
+     team_check_triggers(agent_name="frontend")
+     ```
+   - O bien, un agente puede despachar explícitamente a otro:
+     ```python
+     team_trigger_agent(from_agent="backend", to_agent="frontend", trigger_type="api_spec", artifact_key="auth-api-v1", summary="Implementar vistas y formulario de login")
+     ```
 
 4. **Anuncios y Bloqueos**:
    - Si un agente se encuentra bloqueado o requiere intervención de otro dominio, publica un mensaje con categoría `warning` o `question`:
@@ -37,6 +45,7 @@ Todos los agentes especializados (`@orchestrator`, `@backend`, `@frontend`, `@gi
 5. **Tablero de Tareas**:
    - El `@orchestrator` publica las metas con `team_post_task()`.
    - Los especialistas reclaman sus tareas con `team_claim_task()` y las marcan completadas con `team_update_task()`.
+   - Al completar la tarea, el agente pasa automáticamente a `idle` y se registra un checkpoint de memoria silencioso en `context-memory`.
 
 ---
 

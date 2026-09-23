@@ -77,16 +77,34 @@ function switchView(viewName) {
 // ─────────────────────────────────────────────────────────────
 // REAL-TIME SSE & DATA FETCHING
 // ─────────────────────────────────────────────────────────────
+let sseFallbackTimer = null;
+
 function initSSE() {
   const liveDot = document.querySelector('.pulse-dot');
   const liveText = document.getElementById('liveStatusText');
+
+  function startFallbackPolling() {
+    if (!sseFallbackTimer) {
+      sseFallbackTimer = setInterval(fetchInitialData, 2500);
+    }
+  }
+
+  function stopFallbackPolling() {
+    if (sseFallbackTimer) {
+      clearInterval(sseFallbackTimer);
+      sseFallbackTimer = null;
+    }
+  }
 
   try {
     const evtSource = new EventSource('/api/stream');
 
     evtSource.onopen = () => {
-      liveText.textContent = 'LIVE SSE';
-      liveText.style.color = '#34d399';
+      stopFallbackPolling();
+      if (liveText) {
+        liveText.textContent = 'LIVE SSE';
+        liveText.style.color = '#34d399';
+      }
       if (liveDot) liveDot.style.background = '#10b981';
     };
 
@@ -102,13 +120,16 @@ function initSSE() {
     };
 
     evtSource.onerror = () => {
-      liveText.textContent = 'RECONNECTING';
-      liveText.style.color = '#fbbf24';
+      if (liveText) {
+        liveText.textContent = 'RECONNECTING (POLLING)';
+        liveText.style.color = '#fbbf24';
+      }
       if (liveDot) liveDot.style.background = '#f59e0b';
+      startFallbackPolling();
     };
   } catch (e) {
     console.warn('SSE unavailable, falling back to polling');
-    setInterval(fetchInitialData, 3000);
+    startFallbackPolling();
   }
 }
 

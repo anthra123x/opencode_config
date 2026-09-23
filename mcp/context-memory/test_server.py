@@ -83,5 +83,26 @@ class TestContextMemoryServer(unittest.TestCase):
             self.assertIn("tech-stack", mem)
             self.assertIn("React", mem)
 
+    def test_auto_checkpoint_trigger(self):
+        res1 = server.tool_trigger_auto_checkpoint({
+            "project": "auto-test-app",
+            "event_type": "task_completed",
+            "details": "User authentication endpoints implemented"
+        })
+        self.assertIn("Milestone Checkpoint persisted", res1)
+
+        # Immediate follow-up should be debounced
+        res2 = server.tool_trigger_auto_checkpoint({
+            "project": "auto-test-app",
+            "event_type": "artifact_published",
+            "details": "Another event immediately"
+        })
+        self.assertIn("Debounced", res2)
+
+        # Checkpoint is retrievable
+        chk = server.tool_get_session_checkpoint({"project": "auto-test-app"})
+        self.assertIn("User authentication endpoints", chk)
+
 if __name__ == "__main__":
     unittest.main()
+

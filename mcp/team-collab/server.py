@@ -108,17 +108,18 @@ def get_db():
     conn.execute("PRAGMA busy_timeout = 30000;")
     conn.execute("PRAGMA synchronous = NORMAL;")
     with conn:
-        # Agent status registry with project tracking and window heartbeat
+        # Agent status registry with compound primary key for project isolation
         conn.execute("""
             CREATE TABLE IF NOT EXISTS team_agents (
-                agent_name TEXT PRIMARY KEY,
+                agent_name TEXT NOT NULL,
                 project TEXT NOT NULL DEFAULT 'default',
                 status TEXT NOT NULL DEFAULT 'idle',
                 current_task TEXT DEFAULT '',
                 blockers TEXT DEFAULT '',
                 window_id TEXT DEFAULT '',
                 last_heartbeat TEXT DEFAULT '',
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (agent_name, project)
             )
         """)
         # Feed / Messages with project scope
@@ -151,18 +152,34 @@ def get_db():
         # Shared Artifacts with project tracking
         conn.execute("""
             CREATE TABLE IF NOT EXISTS team_artifacts (
-                artifact_key TEXT PRIMARY KEY,
+                artifact_key TEXT NOT NULL,
                 project TEXT NOT NULL DEFAULT 'default',
                 title TEXT NOT NULL,
                 creator TEXT NOT NULL,
                 artifact_type TEXT NOT NULL DEFAULT 'general',
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (artifact_key, project)
+            )
+        """)
+        # Reactive Work Triggers between agents
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS team_triggers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project TEXT NOT NULL DEFAULT 'default',
+                from_agent TEXT NOT NULL,
+                to_agent TEXT NOT NULL,
+                trigger_type TEXT NOT NULL DEFAULT 'contract',
+                artifact_key TEXT DEFAULT '',
+                summary TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                resolved_at TEXT DEFAULT ''
             )
         """)
 
-        # Migration helper for existing databases missing columns
+        # Migration helper for existing databases missing columns or compound keys
         for col, col_def in [("project", "TEXT NOT NULL DEFAULT 'default'"),
                              ("window_id", "TEXT DEFAULT ''"),
                              ("last_heartbeat", "TEXT DEFAULT ''")]:
@@ -177,8 +194,37 @@ def get_db():
             except sqlite3.OperationalError:
                 pass
 
+        # Check if team_agents has compound primary key (agent_name, project)
+        try:
+            info = conn.execute("PRAGMA table_info(team_agents)").fetchall()
+            pk_cols = [c["name"] for c in info if c["pk"] > 0]
+            if len(pk_cols) < 2 or "project" not in pk_cols:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS team_agents_migrated (
+                        agent_name TEXT NOT NULL,
+                        project TEXT NOT NULL DEFAULT 'default',
+                        status TEXT NOT NULL DEFAULT 'idle',
+                        current_task TEXT DEFAULT '',
+                        blockers TEXT DEFAULT '',
+                        window_id TEXT DEFAULT '',
+                        last_heartbeat TEXT DEFAULT '',
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (agent_name, project)
+                    )
+                """)
+                conn.execute("""
+                    INSERT OR IGNORE INTO team_agents_migrated (agent_name, project, status, current_task, blockers, window_id, last_heartbeat, updated_at)
+                    SELECT agent_name, COALESCE(project, 'default'), status, current_task, blockers, window_id, last_heartbeat, updated_at
+                    FROM team_agents
+                """)
+                conn.execute("DROP TABLE team_agents")
+                conn.execute("ALTER TABLE team_agents_migrated RENAME TO team_agents")
+        except Exception:
+            pass
+
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_team_artifacts_key_proj ON team_artifacts(artifact_key, project)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_team_agents_name_proj ON team_agents(agent_name, project)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_team_triggers_to_proj ON team_triggers(to_agent, project, status)")
     return conn
 
 # Tool Definitions
@@ -359,6 +405,35 @@ TOOLS = [
             },
             "required": ["from_agent", "to_agent", "notes"]
         }
+    },
+    {
+        "name": "team_trigger_agent",
+        "description": "Emit a reactive work trigger directed to another agent (e.g. backend triggers frontend or qa-auditor) with an attached contract, immediately notifying and activating the target agent.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "from_agent": {"type": "string", "description": "Agent initiating trigger (e.g. 'backend')"},
+                "to_agent": {"type": "string", "description": "Target agent to activate (e.g. 'frontend', 'qa-auditor')"},
+                "trigger_type": {"type": "string", "enum": ["contract", "api_spec", "db_schema", "review", "deploy"], "description": "Type of trigger"},
+                "artifact_key": {"type": "string", "description": "Optional artifact or contract key"},
+                "summary": {"type": "string", "description": "Description of work required for the target agent"},
+                "project": {"type": "string", "description": "Project scope (defaults to current project)"}
+            },
+            "required": ["to_agent", "summary"]
+        }
+    },
+    {
+        "name": "team_check_triggers",
+        "description": "Check and claim pending reactive triggers assigned to an agent, retrieving the required contracts and instructions to start work immediately.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "agent_name": {"type": "string", "description": "Name of agent checking triggers (e.g. 'frontend')"},
+                "claim": {"type": "boolean", "description": "Whether to mark pending triggers as claimed (default true)"},
+                "project": {"type": "string", "description": "Project scope (defaults to current project)"}
+            },
+            "required": ["agent_name"]
+        }
     }
 ]
 
@@ -446,8 +521,7 @@ def tool_team_set_status(args):
         conn.execute("""
             INSERT INTO team_agents (agent_name, project, status, current_task, blockers, window_id, last_heartbeat, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(agent_name) DO UPDATE SET
-                project = excluded.project,
+            ON CONFLICT(agent_name, project) DO UPDATE SET
                 status = excluded.status,
                 current_task = excluded.current_task,
                 blockers = excluded.blockers,
@@ -474,8 +548,7 @@ def tool_team_heartbeat(args):
         conn.execute("""
             INSERT INTO team_agents (agent_name, project, status, current_task, blockers, window_id, last_heartbeat, updated_at)
             VALUES (?, ?, 'working', ?, '', ?, ?, ?)
-            ON CONFLICT(agent_name) DO UPDATE SET
-                project = excluded.project,
+            ON CONFLICT(agent_name, project) DO UPDATE SET
                 current_task = CASE WHEN excluded.current_task != '' THEN excluded.current_task ELSE team_agents.current_task END,
                 window_id = CASE WHEN excluded.window_id != '' THEN excluded.window_id ELSE team_agents.window_id END,
                 last_heartbeat = excluded.last_heartbeat,
@@ -748,14 +821,13 @@ def tool_team_claim_task(args):
         if cur.rowcount == 0:
             return f"Task #{task_id} not found."
 
-        cur_task = conn.execute("SELECT title FROM team_tasks WHERE id = ?", (task_id,)).fetchone()
+        cur_task = conn.execute("SELECT title, assigned_to, project FROM team_tasks WHERE id = ?", (task_id,)).fetchone()
         task_title = cur_task["title"] if cur_task else f"Task #{task_id}"
 
         conn.execute("""
             INSERT INTO team_agents (agent_name, project, status, current_task, updated_at)
             VALUES (?, ?, 'working', ?, ?)
-            ON CONFLICT(agent_name) DO UPDATE SET
-                project = excluded.project,
+            ON CONFLICT(agent_name, project) DO UPDATE SET
                 status = 'working',
                 current_task = excluded.current_task,
                 updated_at = excluded.updated_at
@@ -774,13 +846,38 @@ def tool_team_update_task(args):
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
     with db_write_lock(conn):
-        cur = conn.execute("""
+        cur_task = conn.execute("SELECT title, assigned_to, project FROM team_tasks WHERE id = ?", (task_id,)).fetchone()
+        if not cur_task:
+            return f"Task #{task_id} not found."
+
+        assigned_to = cur_task["assigned_to"]
+        task_proj = cur_task["project"] or "default"
+        task_title = cur_task["title"]
+
+        conn.execute("""
             UPDATE team_tasks
             SET status = ?, notes = CASE WHEN ? != '' THEN ? ELSE notes END, updated_at = ?
             WHERE id = ?
         """, (status, notes, notes, now, task_id))
-        if cur.rowcount == 0:
-            return f"Task #{task_id} not found."
+
+        # If completed or cancelled, check if assigned agent has any other in_progress tasks
+        if status in ("completed", "cancelled") and assigned_to:
+            cur_other = conn.execute("""
+                SELECT COUNT(*) FROM team_tasks
+                WHERE assigned_to = ? AND project = ? AND status = 'in_progress' AND id != ?
+            """, (assigned_to, task_proj, task_id))
+            if cur_other.fetchone()[0] == 0:
+                conn.execute("""
+                    INSERT INTO team_agents (agent_name, project, status, current_task, updated_at)
+                    VALUES (?, ?, 'idle', '', ?)
+                    ON CONFLICT(agent_name, project) DO UPDATE SET
+                        status = 'idle',
+                        current_task = '',
+                        updated_at = excluded.updated_at
+                """, (assigned_to, task_proj, now))
+
+    if status == "completed":
+        auto_checkpoint_team(task_proj, "task_completed", f"Task #{task_id} ('{task_title}') completed by @{assigned_to or 'team'}")
 
     return f"✓ Task #{task_id} updated to status '{status.upper()}'."
 
@@ -832,8 +929,7 @@ def tool_team_share_artifact(args):
         conn.execute("""
             INSERT INTO team_artifacts (artifact_key, project, title, creator, artifact_type, content, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(artifact_key) DO UPDATE SET
-                project = excluded.project,
+            ON CONFLICT(artifact_key, project) DO UPDATE SET
                 title = excluded.title,
                 creator = excluded.creator,
                 artifact_type = excluded.artifact_type,
@@ -841,7 +937,22 @@ def tool_team_share_artifact(args):
                 updated_at = excluded.updated_at
         """, (artifact_key, project, title, creator, artifact_type, content, now, now))
 
-    return f"✓ Artifact '{artifact_key}' ({title}) saved by @{creator} in [{project}]."
+    # Reactive Cross-Agent Triggering:
+    # If backend publishes API spec or schema, trigger frontend to begin consuming it
+    if creator == "backend" or artifact_type in ("api_spec", "db_schema", "schema"):
+        dispatch_trigger(
+            from_agent=creator,
+            to_agent="frontend",
+            trigger_type=artifact_type,
+            artifact_key=artifact_key,
+            summary=f"Backend published contract '{artifact_key}' ({title}). Frontend action required: integrate in UI components.",
+            project=project
+        )
+
+    # Automatic Zero-Compaction checkpoint
+    auto_checkpoint_team(project, "artifact_published", f"Artifact '{artifact_key}' ({title}) published by @{creator}")
+
+    return f"✓ Artifact '{artifact_key}' ({title}) saved by @{creator} in [{project}]. Reactive trigger dispatched to @frontend."
 
 def tool_team_get_artifact(args):
     artifact_key = args.get("artifact_key", "").strip()
@@ -877,12 +988,11 @@ def tool_team_handoff(args):
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     conn = get_db()
     with db_write_lock(conn):
-        # Update from_agent to ready_for_review / idle
+        # Update from_agent to idle
         conn.execute("""
             INSERT INTO team_agents (agent_name, project, status, current_task, updated_at)
             VALUES (?, ?, 'idle', '', ?)
-            ON CONFLICT(agent_name) DO UPDATE SET
-                project = excluded.project,
+            ON CONFLICT(agent_name, project) DO UPDATE SET
                 status = 'idle',
                 current_task = '',
                 updated_at = excluded.updated_at
@@ -893,8 +1003,7 @@ def tool_team_handoff(args):
         conn.execute("""
             INSERT INTO team_agents (agent_name, project, status, current_task, updated_at)
             VALUES (?, ?, 'working', ?, ?)
-            ON CONFLICT(agent_name) DO UPDATE SET
-                project = excluded.project,
+            ON CONFLICT(agent_name, project) DO UPDATE SET
                 status = 'working',
                 current_task = excluded.current_task,
                 updated_at = excluded.updated_at
@@ -916,7 +1025,121 @@ def tool_team_handoff(args):
             VALUES (?, ?, ?, 'handoff', 'high', ?)
         """, (project, from_agent, msg, now))
 
+    # Emit reactive trigger and auto-checkpoint
+    dispatch_trigger(from_agent, to_agent, "handoff", artifact_key, notes, project)
+    auto_checkpoint_team(project, "handoff", f"Handoff @{from_agent} ➔ @{to_agent}: {notes}")
+
     return f"✓ Handoff completed in [{project}]: @{from_agent} → @{to_agent}. {msg}"
+
+# ─────────────────────────────────────────────────────────────
+# REACTIVE WORK TRIGGERS & AUTO-CHECKPOINT HELPERS
+# ─────────────────────────────────────────────────────────────
+
+def auto_checkpoint_team(project, event_type, details):
+    """Safely updates context_memory.db with auto-checkpoint on key milestones."""
+    try:
+        mem_db_path = Path(os.environ.get("OPENCODE_MEMORY_DB", Path.home() / ".opencode" / "memory" / "context_memory.db"))
+        if mem_db_path.parent.exists():
+            conn = sqlite3.connect(str(mem_db_path), timeout=10.0)
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            now_human = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            content = f"# Auto-Checkpoint: [{project}]\n**Timestamp**: {now_human} UTC\n**Milestone Event**: `{event_type}`\n\n### Details\n{details}\n"
+            conn.execute("""
+                INSERT INTO memories (key, category, content, tags, project, created_at, updated_at)
+                VALUES (?, 'decision', ?, 'auto_checkpoint, zero_compaction', ?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    content = excluded.content,
+                    tags = excluded.tags,
+                    updated_at = excluded.updated_at
+            """, (f"{project}-checkpoint-latest", content, project, now_iso, now_iso))
+            conn.commit()
+            conn.close()
+    except Exception:
+        pass
+
+def dispatch_trigger(from_agent, to_agent, trigger_type, artifact_key, summary, project):
+    """Emits a reactive trigger row, updates target agent to working, and broadcasts notification."""
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    conn = get_db()
+    with db_write_lock(conn):
+        conn.execute("""
+            INSERT INTO team_triggers (project, from_agent, to_agent, trigger_type, artifact_key, summary, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+        """, (project, from_agent, to_agent, trigger_type, artifact_key, summary, now))
+
+        # Mark target agent as working on this trigger
+        current_task_desc = f"⚡ Triggered by @{from_agent}: {summary[:55]}"
+        conn.execute("""
+            INSERT INTO team_agents (agent_name, project, status, current_task, updated_at)
+            VALUES (?, ?, 'working', ?, ?)
+            ON CONFLICT(agent_name, project) DO UPDATE SET
+                status = 'working',
+                current_task = excluded.current_task,
+                updated_at = excluded.updated_at
+        """, (to_agent, project, current_task_desc, now))
+
+        # Add message to team bus
+        conn.execute("""
+            INSERT INTO team_messages (project, sender, message, category, priority, created_at)
+            VALUES (?, ?, ?, 'handoff', 'high', ?)
+        """, (project, from_agent, f"⚡ REACTIVE TRIGGER ➔ @{to_agent}: {summary} [Artifact: {artifact_key or 'none'}]", now))
+
+def tool_team_trigger_agent(args):
+    from_agent = normalize_agent_name(args.get("from_agent", "")) or "orchestrator"
+    to_agent = normalize_agent_name(args.get("to_agent", ""))
+    trigger_type = args.get("trigger_type", "task").strip()
+    artifact_key = args.get("artifact_key", "").strip()
+    summary = args.get("summary", "").strip()
+    project = get_current_project(args.get("project"))
+
+    if not to_agent or not summary:
+        return "Error: to_agent and summary are required."
+
+    dispatch_trigger(from_agent, to_agent, trigger_type, artifact_key, summary, project)
+    auto_checkpoint_team(project, "agent_trigger", f"@{from_agent} triggered @{to_agent}: {summary}")
+    return f"⚡ Reactive Trigger dispatched to @{to_agent} in [{project}]: {summary}"
+
+def tool_team_check_triggers(args):
+    agent_name = normalize_agent_name(args.get("agent_name", ""))
+    project = get_current_project(args.get("project"))
+    claim = args.get("claim", True)
+
+    if not agent_name:
+        return "Error: agent_name is required."
+
+    conn = get_db()
+    cur = conn.execute("""
+        SELECT id, project, from_agent, to_agent, trigger_type, artifact_key, summary, status, created_at
+        FROM team_triggers
+        WHERE to_agent = ? AND (project = ? OR project = 'default') AND status = 'pending'
+        ORDER BY id ASC
+    """, (agent_name, project))
+    triggers = cur.fetchall()
+
+    if not triggers:
+        return f"No pending triggers for @{agent_name} in [{project}]."
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    lines = [f"⚡ Pending Reactive Triggers for @{agent_name} [{project}] ({len(triggers)} trigger(s)):"]
+    trigger_ids = []
+
+    for t in triggers:
+        trigger_ids.append(t["id"])
+        art_info = f" | Artifact: `{t['artifact_key']}`" if t["artifact_key"] else ""
+        lines.append(f"• Trigger #{t['id']} [{t['trigger_type'].upper()}] from @{t['from_agent']}: {t['summary']}{art_info}")
+        if t["artifact_key"]:
+            cur_art = conn.execute("SELECT content FROM team_artifacts WHERE artifact_key = ? LIMIT 1", (t["artifact_key"],)).fetchone()
+            if cur_art:
+                content_preview = cur_art["content"][:300] + ("..." if len(cur_art["content"]) > 300 else "")
+                lines.append(f"  └ Contract Preview:\n```\n{content_preview}\n```")
+
+    if claim:
+        with db_write_lock(conn):
+            for tid in trigger_ids:
+                conn.execute("UPDATE team_triggers SET status = 'claimed', resolved_at = ? WHERE id = ?", (now, tid))
+        lines.append(f"\n✓ All {len(trigger_ids)} trigger(s) claimed. @{agent_name} is actively executing them.")
+
+    return "\n".join(lines)
 
 TOOL_HANDLERS = {
     "team_broadcast": tool_team_broadcast,
@@ -932,6 +1155,8 @@ TOOL_HANDLERS = {
     "team_share_artifact": tool_team_share_artifact,
     "team_get_artifact": tool_team_get_artifact,
     "team_handoff": tool_team_handoff,
+    "team_trigger_agent": tool_team_trigger_agent,
+    "team_check_triggers": tool_team_check_triggers,
 }
 
 # MCP JSON-RPC Stdio Loop

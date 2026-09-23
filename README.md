@@ -262,12 +262,26 @@ OpenCode Swarm soluciona esto con una arquitectura **Zero-Compaction** nativa:
 
 1. **Desactivación de Compactación Destructiva**:
    En `config/opencode.jsonc`, se configura `"compaction": { "auto": false, "tail_turns": 80 }`. OpenCode no compacta de manera forzada el historial de turnos.
-2. **Checkpoints de Sesión (`checkpoint_session`)**:
-   Los agentes o el usuario (desde la UI web) guardan puntos de control estructurados con resumen de avances, decisiones tomadas, tarea activa, próximos pasos y archivos modificados.
+2. **Checkpoints Automáticos Silenciosos (`auto_checkpoint`)**:
+   El sistema no requiere guardado manual: cada vez que un agente completa una tarea (`team_update_task`), publica un contrato (`team_share_artifact`) o realiza un handoff (`team_handoff`), se genera un checkpoint debounced en SQLite FTS5 y se refleja al instante en el grafo GetBrain.
 3. **Reanudación Instantánea (`get_session_checkpoint`)**:
    Cualquier agente que retoma el proyecto recupera el último checkpoint con 100% de fidelidad sin necesidad de cargar cientos de mensajes en el contexto conversacional.
 4. **Sincronización Automática (`auto_sync_project_memory`)**:
    Detecta automáticamente el framework, librerías y modelos del proyecto persistiendo el mapa arquitectónico en SQLite FTS5.
+
+---
+
+## ⚡ Sistema de Disparadores Reactivos Cross-Agent (Backend ➔ Frontend)
+
+OpenCode Swarm implementa un bus reactivo de trabajo (*Reactive Work Triggers*) en `team-collab`:
+
+1. **Disparo Automático al Compartir Contratos**:
+   - Cuando `@backend` publica una API o esquema (`api_spec`, `db_schema`) con `team_share_artifact`, el MCP genera automáticamente un disparador dirigido a `@frontend` en la tabla `team_triggers`.
+   - En el Swarm Cockpit Web y terminales, `@frontend` pasa inmediatamente a estado `WORKING` con la tarea *"⚡ Triggered by @backend: Consume contract..."*.
+2. **Consumo y Ejecución Inmediata**:
+   - `@frontend` ejecuta `team_check_triggers(agent_name="frontend")` al iniciar su turno, reclamando el disparador y obteniendo la especificación completa sin que el usuario tenga que explicarla ni copiar datos.
+3. **Transición Automática a Idle**:
+   - Al marcar una tarea como `completed` en `team_update_task`, el agente pasa automáticamente a `idle` si no tiene más tareas en curso, manteniendo el panel web y el estado de la terminal 100% sincronizados.
 
 ---
 
