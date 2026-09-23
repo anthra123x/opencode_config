@@ -349,7 +349,12 @@ cmd_web() {
     exit 1
   fi
 
-  python3 "$server_script" "$@"
+  local proj_dir
+  proj_dir="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || pwd)"
+  local proj_name
+  proj_name="$(basename "$proj_dir")"
+
+  python3 "$server_script" --dir "$proj_dir" --project "$proj_name" "$@"
 }
 
 # ─── Memory Inspector ───

@@ -1,12 +1,13 @@
 /**
  * Team HUD Plugin for OpenCode
- * Adds multi-agent team swarm branding, terminal title hooks,
- * and session greeting with stylized typography.
+ * Adds multi-agent team swarm branding, per-project dedicated web session discovery,
+ * and live monitoring links in OpenCode's central tips interface.
  */
 
 export default async function teamHudPlugin({ project, directory }: any) {
+  const projDir = String(directory || (project?.worktree || process.cwd()));
   const rawName = (typeof project === "string" ? project : (project?.worktree || project?.name || project?.id)) ||
-                  (directory ? directory.split("/").pop() : "Workspace");
+                  (projDir ? projDir.split("/").filter(Boolean).pop() : "Workspace");
   const projName = String(rawName);
 
   // Set terminal title via ANSI OSC sequence
@@ -14,7 +15,7 @@ export default async function teamHudPlugin({ project, directory }: any) {
     process.stdout.write(`\x1b]0;⚡ ᴏᴘᴇɴᴄᴏᴅᴇ [ꜱᴡᴀʀᴍ] — ${projName}\x07`);
   }
 
-  // Visual banner with stylized typography
+  // Visual banner colors
   const C_PURPLE = "\x1b[38;5;141m";
   const C_CYAN   = "\x1b[38;5;51m";
   const C_GREEN  = "\x1b[38;5;48m";
@@ -24,27 +25,44 @@ export default async function teamHudPlugin({ project, directory }: any) {
   const C_YELLOW = "\x1b[38;5;220m";
   const C_BLUE   = "\x1b[38;5;75m";
 
-  // Auto-start web server in background if not already responding on port 4040
+  // Determine dedicated port for this project
+  let webPort = process.env.OPENCODE_WEB_PORT || "4040";
+
   try {
-    const { spawn } = await import("child_process");
-    const http = await import("http");
+    const { execFileSync } = await import("child_process");
     const path = await import("path");
     const os = await import("os");
+    const fs = await import("fs");
 
-    const req = http.request({ host: "127.0.0.1", port: 4040, path: "/api/status", method: "GET", timeout: 350 });
-    req.on("error", () => {
-      const srvPath = path.join(os.homedir(), ".config", "opencode", "web", "server.py");
-      try {
-        const child = spawn("python3", [srvPath, "--port", "4040"], {
-          detached: true,
-          stdio: "ignore"
-        });
-        child.unref();
-      } catch (_) {}
-    });
-    req.end();
+    const possiblePaths = [
+      path.join(os.homedir(), ".config", "opencode", "web", "server.py"),
+      path.join(__dirname, "..", "web", "server.py"),
+      "/home/omicron/Documentos/opencodeconfig/web/server.py"
+    ];
+
+    let srvPath = "";
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        srvPath = p;
+        break;
+      }
+    }
+
+    if (srvPath) {
+      const out = execFileSync("python3", [srvPath, "--ensure", "--dir", projDir, "--project", projName], {
+        encoding: "utf8",
+        timeout: 2500
+      }).trim();
+      if (out && !isNaN(Number(out))) {
+        webPort = out;
+      }
+    }
   } catch (_) {}
 
+  const webUrl = `http://localhost:${webPort}`;
+  const brainUrl = `${webUrl}/#brain`;
+
+  // Stylized welcome banner
   console.log(
     `\n${C_PURPLE}${C_BOLD}╭──────────────────────────────────────────────────────────────╮${C_RESET}\n` +
     `${C_PURPLE}${C_BOLD}│  ⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫ v2.0                          │${C_RESET}\n` +
@@ -55,8 +73,8 @@ export default async function teamHudPlugin({ project, directory }: any) {
     `${C_PURPLE}${C_BOLD}│        @qa-auditor · @devops                                 ${C_PURPLE}│${C_RESET}\n` +
     `${C_PURPLE}${C_BOLD}├──────────────────────────────────────────────────────────────┤${C_RESET}\n` +
     `${C_PURPLE}${C_BOLD}│  ${C_YELLOW}💡 Tip: Servidor de Monitoreo & GetBrain Activo             ${C_PURPLE}│${C_RESET}\n` +
-    `${C_PURPLE}${C_BOLD}│  ${C_RESET}Monitorear flujo de trabajo: ${C_BLUE}${C_BOLD}http://localhost:4040${C_RESET}             ${C_PURPLE}│${C_RESET}\n` +
-    `${C_PURPLE}${C_BOLD}│  ${C_RESET}Visualizar grafo de conocimiento: ${C_BLUE}${C_BOLD}http://localhost:4040/#brain${C_RESET}  ${C_PURPLE}│${C_RESET}\n` +
+    `${C_PURPLE}${C_BOLD}│  ${C_RESET}Monitorear flujo de trabajo: ${C_BLUE}${C_BOLD}${webUrl.padEnd(27)}${C_RESET}${C_PURPLE}${C_BOLD}│${C_RESET}\n` +
+    `${C_PURPLE}${C_BOLD}│  ${C_RESET}Visualizar grafo GetBrain:   ${C_BLUE}${C_BOLD}${brainUrl.padEnd(27)}${C_RESET}${C_PURPLE}${C_BOLD}│${C_RESET}\n` +
     `${C_PURPLE}${C_BOLD}╰──────────────────────────────────────────────────────────────╯${C_RESET}\n`
   );
 
@@ -64,6 +82,9 @@ export default async function teamHudPlugin({ project, directory }: any) {
     config: (cfg: any) => {
       if (cfg && !cfg.default_agent) {
         cfg.default_agent = "orchestrator";
+      }
+      if (cfg && cfg.agent && cfg.agent.orchestrator) {
+        cfg.agent.orchestrator.description = `Team Lead & Orchestrator. Monitoreo: ${webUrl} | GetBrain: ${brainUrl}`;
       }
     }
   };

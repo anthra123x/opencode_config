@@ -124,6 +124,7 @@ async function fetchInitialData() {
 
     updateSwarmUI({
       project: resStatus.project,
+      project_dir: resStatus.project_dir,
       branch: resStatus.branch,
       clock: resStatus.clock,
       agents: resStatus.agents,
@@ -157,13 +158,24 @@ async function fetchBrainGraph() {
 function updateSwarmUI(data) {
   if (data.project) {
     state.project = data.project;
-    document.getElementById('projectName').textContent = data.project;
+    const nameEl = document.getElementById('projectName');
+    if (nameEl) nameEl.textContent = data.project;
+    document.title = `⚡ OpenCode Swarm [${data.project}]`;
+  }
+  if (data.project_dir) {
+    state.projectDir = data.project_dir;
+    const pill = document.getElementById('projectPill');
+    if (pill) {
+      pill.title = `Directorio del Proyecto: ${data.project_dir}`;
+    }
   }
   if (data.branch) {
-    document.getElementById('projectBranch').textContent = data.branch;
+    const branchEl = document.getElementById('projectBranch');
+    if (branchEl) branchEl.textContent = data.branch;
   }
   if (data.clock) {
-    document.getElementById('liveClock').textContent = data.clock;
+    const clockEl = document.getElementById('liveClock');
+    if (clockEl) clockEl.textContent = data.clock;
   }
 
   if (data.agents) {

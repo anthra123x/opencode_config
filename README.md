@@ -214,17 +214,23 @@ ecc update
 
 ---
 
-## 🧠 Swarm Cockpit & GetBrain: Monitoreo en Tiempo Real y Grafo de Conocimiento
+## 🧠 Swarm Cockpit & GetBrain: Sesiones Web Dedicadas por Proyecto
 
-OpenCode Swarm incluye un **servidor web local multi-hilo** (`web/server.py`) que **se inicia de forma 100% automática y silenciosa en segundo plano cada vez que abres OpenCode** en tu terminal.
+OpenCode Swarm incluye un **servidor web local multi-hilo** (`web/server.py`) que **se inicia de forma 100% automática y silenciosa en segundo plano cada vez que abres OpenCode** en tu terminal, gestionando **sesiones dedicadas y aisladas por proyecto**:
+
+### 🎯 Sesiones Dedicadas & Asignación Dinámica de Puertos:
+- **Aislamiento Total por Proyecto**: Cada proyecto en el que trabajes obtiene su propia instancia de servidor web con un puerto dedicado (rango `4040` - `4060`).
+  - Proyecto A (`opencodeconfig`): se ejecuta en `http://localhost:4040` con su rama Git (`main`), sus tareas y sus archivos en el GetBrain.
+  - Proyecto B (`mi-app-web`): al abrir OpenCode en otra carpeta, detecta automáticamente el nuevo proyecto y levanta una sesión independiente en `http://localhost:4041`, visualizando únicamente los archivos, ramas y módulos de ese proyecto.
+- **Compartición Inteligente Cross-Terminal**: Si abres múltiples ventanas o terminales dentro del *mismo* proyecto (ej. una para `@backend` y otra para `@frontend`), ambas detectan y reutilizan el mismo puerto sin crear servidores duplicados ni colisiones.
 
 ### 💡 Integración Nativa en la Pantalla Central de OpenCode:
 Para evitar ventanas emergentes o textos fugaces que desaparecen antes de que puedas interactuar, los accesos al servidor están integrados **directamente dentro de la interfaz central de OpenCode**:
-1. **Recuadro de Tips en el Home (`home_bottom`)**: En el centro de la pantalla inicial de OpenCode, la sección de tips te ofrece de inmediato los enlaces activos resaltados con el color de tu tema:
-   - `💡 Monitorea el flujo de los agentes en http://localhost:4040`
-   - `🧠 Grafo de conocimiento GetBrain: http://localhost:4040/#brain`
-2. **Encabezado del Agente Activo**: En el selector central de agentes, la descripción de `@orchestrator` te recuerda el enlace directo para abrir el panel de control.
-3. **Comandos y Saludo de Sesión**: Al iniciar una sesión o usar `/team` o `/brain`, los agentes proporcionan los hipervínculos directos.
+1. **Recuadro de Tips en el Home (`home_bottom`)**: En el centro de la pantalla inicial de OpenCode, la sección de tips te ofrece de inmediato los enlaces activos con el puerto exacto de tu proyecto:
+   - `💡 Monitorea el flujo de los agentes en http://localhost:<puerto>`
+   - `🧠 Grafo de conocimiento GetBrain: http://localhost:<puerto>/#brain`
+2. **Encabezado del Agente Activo**: En el selector central de agentes, la descripción de `@orchestrator` se actualiza dinámicamente con el enlace directo al panel del proyecto activo.
+3. **Banner Informativo al Abrir**: El plugin `team-hud` despliega en la terminal el recuadro con la URL y puerto asignado a ese proyecto específico.
 
 Si deseas forzar la apertura del navegador desde tu terminal en cualquier momento:
 ```bash
@@ -232,16 +238,16 @@ ecc web --open
 ```
 
 ### Características de la Suite Web:
-1. **Swarm Cockpit (Pestaña 1 - `http://localhost:4040`)**:
+1. **Swarm Cockpit (Pestaña 1 - `http://localhost:<puerto>`)**:
    - **Roster en Tiempo Real**: Tarjetas visuales de los 6 especialistas (`@orchestrator`, `@backend`, `@frontend`, `@git-flow`, `@qa-auditor`, `@devops`) con indicadores de pulso verde en vivo, identificador de ventana de terminal (`term-1-backend`), tarea en curso y tiempo transcurrido.
    - **Tablero Kanban de Flujo de Trabajo**: Vista sincronizada de tareas Por Hacer, En Curso, Revisión y Completadas con prioridades y notas. Interfaz limpia enfocada en supervisión en vivo.
-   - **Feed de Actividad en Vivo**: Transmisión instantánea mediante **Server-Sent Events (SSE)** de todos los avisos y pases de guardia que ocurren en tus terminales de OpenCode.
+   - **Feed de Actividad en Vivo**: Transmisión instantánea mediante **Server-Sent Events (SSE)** de todos los avisos y pases de guardia que ocurren en tus terminales de OpenCode para ese proyecto.
    - **Contratos & Memorias**: Explorador de especificaciones de API, esquemas y decisiones de arquitectura guardadas en SQLite FTS5.
 
-2. **GetBrain Knowledge Graph (Pestaña 2 - `http://localhost:4040/#brain`)**:
+2. **GetBrain Knowledge Graph (Pestaña 2 - `http://localhost:<puerto>/#brain`)**:
    - **Motor de Física 2D Interactivo**: Visualizador en Canvas HTML5 con simulación de fuerzas gravitatorias y resortes, auto-ajuste de escala y partículas de energía que fluyen por los enlaces activos.
-   - **Grafo Sintetizado Automáticamente**: Conecta Agentes, Tareas, Contratos publicados, Decisiones de memoria y Archivos de código del proyecto:
-     $$\text{Agente} \xrightarrow{\text{trabaja en}} \text{Tarea} \xrightarrow{\text{impacta}} \text{Módulo}$$
+   - **Grafo Sintetizado Automáticamente**: Escanea el espacio de trabajo del proyecto actual y conecta Agentes, Tareas, Contratos publicados, Decisiones de memoria y Archivos de código reales del proyecto:
+     $$\text{Agente} \xrightarrow{\text{trabaja en}} \text{Tarea} \xrightarrow{\text{impacta}} \text{Módulo del Proyecto}$$
      $$\text{Backend} \xrightarrow{\text{publicó}} \text{Contrato API} \xrightarrow{\text{consumido por}} \text{Frontend}$$
    - **Inspector Lateral de Nodos**: Haz clic en cualquier nodo para ver su especificación técnica, contenido completo, creador y conexiones vinculadas.
    - **Filtros Dinámicos & Búsqueda**: Filtra por tipo de nodo (Agentes, Tareas, Contratos, Memorias, Código) o busca por nombre.
