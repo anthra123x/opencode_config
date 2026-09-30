@@ -60,17 +60,20 @@ def patch_binary(src_path, dst_path):
     orig_am = bytes(data[pos_am:end_am])
     orig_am_len = len(orig_am)
 
-    cand_smallcaps = """am={left:["                   ","\\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2584","\\u2588__\\u2588 \\u2588__\\u2588 \\u2588^^^ \\u2588__\\u2588","\\u2580\\u2580\\u2580\\u2580 \\u2588\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580 \\u2580~~\\u2580"],right:["             \\u2584     ","\\u2588\\u2580\\u2580\\u2580 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588","\\u2588___ \\u2588__\\u2588 \\u2588__\\u2588 \\u2588^^^  ꜱᴡᴀʀᴍ","\\u2580\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580  ᴇᴅɪᴛɪᴏɴ"]},"""
-    # Replace 12 occurrences of "\\u2580" (6 bytes) with "\u2580" UTF-8 (3 bytes) to balance byte count
-    cand_str = cand_smallcaps.replace("\\u2580", "\u2580", 12)
-    new_am = cand_str.encode("utf-8")
+    # Pure ASCII logo patch: keeps all opencode letters and 19-char left spacing 100% untouched
+    cand_am = b"""am={left:["                   ","\\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2584","\\u2588__\\u2588 \\u2588__\\u2588 \\u2588^^^ \\u2588__\\u2588","\\u2580\\u2580\\u2580\\u2580 \\u2588\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580 \\u2580~~\\u2580"],right:["             \\u2584     ","\\u2588\\u2580\\u2580\\u2580 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588","\\u2588___ \\u2588__\\u2588 \\u2588__\\u2588 \\u2588^^^  SWARM","\\u2580\\u2580\\u2580\\u2580 ".repeat(3)+"\\u2580\\u2580\\u2580\\u2580  EDITION"]},"""
+    diff_am = orig_am_len - len(cand_am)
+    if diff_am < 0:
+        print(f"[!] Warning: Logo candidate too long: {len(cand_am)} vs {orig_am_len}")
+        return False
+    final_am = cand_am.replace(b"]},", b" " * diff_am + b"]},")
 
-    if len(new_am) != orig_am_len:
-        print(f"[!] Warning: Logo patch length mismatch: expected {orig_am_len}, got {len(new_am)}")
+    if len(final_am) != orig_am_len:
+        print(f"[!] Warning: Logo patch length mismatch: expected {orig_am_len}, got {len(final_am)}")
         return False
 
-    data[pos_am:end_am] = new_am
-    print(f"[✓] Patched OpenCode logo with Minecraft-style 'ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ' subtitle ({orig_am_len} bytes)")
+    data[pos_am:end_am] = final_am
+    print(f"[✓] Patched OpenCode logo with Minecraft-style 'SWARM EDITION' subtitle ({orig_am_len} bytes, pure ASCII)")
 
     # --- 2. Patch Prompt Footer Location / Session Web URL ---
     orig_prompt = b"""dn=c(()=>{if(!r.sessionID)return _.ref??C.location.default();if(ne()!=="idle")return;return C.session.get(r.sessionID)?.location}),zr=c(()=>{let Ie=Xe(),et=Ie?{directory:Ie}:dn();if(!et)return;let X=Al(et.directory,T.home),de=C.location.vcs.info(et)?.branch.current;return de?`${X}:${de}`:X}),[fn,gn]=w(se().width),_r=c(()=>{let Ie=zr();if(!Ie)return;return wL(Ie,fn())})"""
@@ -80,16 +83,15 @@ def patch_binary(src_path, dst_path):
         return False
 
     orig_prompt_len = len(orig_prompt)
-    cand_prompt = b"""dn=c(()=>!r.sessionID?_.ref??C.location.default():ne()==="idle"?C.session.get(r.sessionID)?.location:void 0),zr=c(()=>{let I=Xe(),e=I?{directory:I}:dn();if(!e)return;let X=Al(e.directory,T.home),b=C.location.vcs.info(e)?.branch.current,u=Bun.env.OPENCODE_WEB_URL;return(b?`${X}:${b}`:X)+(u?`  \xe2\x9a\xa1 ${u}`:"")}),[fn,gn]=w(se().width),_r=c(()=>zr()?wL(zr(),fn()):void 0)"""
-    diff = orig_prompt_len - len(cand_prompt)
-    new_prompt = cand_prompt.replace(b":void 0)", b":" + b" "*diff + b"void 0)", 1)
+    # Pure ASCII prompt patch: appends web URL outside of wL path-shortening to prevent URL truncation
+    cand_prompt = b"""dn=c(()=>!r.sessionID?_.ref??C.location.default():ne()=="idle"?C.session.get(r.sessionID)?.location: void 0),zr=c(()=>{let I=Xe(),e=I?{directory:I}:dn();if(!e)return;let X=Al(e.directory,T.home),b=C.location.vcs.info(e)?.branch.current;return b?X+":"+b:X}),[fn,gn]=w(se().width),_r=c(()=>{let I=zr(),u=Bun.env.OPENCODE_WEB_URL;return I?wL(I,fn())+(u?`  ${u}`:""):void 0})"""
 
-    if len(new_prompt) != orig_prompt_len:
-        print(f"[!] Warning: Prompt footer patch length mismatch: expected {orig_prompt_len}, got {len(new_prompt)}")
+    if len(cand_prompt) != orig_prompt_len:
+        print(f"[!] Warning: Prompt footer patch length mismatch: expected {orig_prompt_len}, got {len(cand_prompt)}")
         return False
 
-    data[pos_prompt:pos_prompt + orig_prompt_len] = new_prompt
-    print(f"[✓] Patched prompt footer location with active Web Cockpit URL ({orig_prompt_len} bytes)")
+    data[pos_prompt:pos_prompt + orig_prompt_len] = cand_prompt
+    print(f"[✓] Patched prompt footer location with active Web Cockpit URL ({orig_prompt_len} bytes, pure ASCII)")
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(os.path.abspath(dst_path)), exist_ok=True)
@@ -100,8 +102,17 @@ def patch_binary(src_path, dst_path):
     return True
 
 def main():
-    dest = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/.config/opencode/bin/opencode-swarm")
-    src = sys.argv[2] if len(sys.argv) > 2 else find_system_opencode()
+    dest = os.path.expanduser("~/.config/opencode/bin/opencode-swarm")
+    src = find_system_opencode()
+
+    if len(sys.argv) == 2:
+        dest = sys.argv[1]
+    elif len(sys.argv) >= 3:
+        a1, a2 = sys.argv[1], sys.argv[2]
+        if a1.startswith("/usr") or "swarm" in a2:
+            src, dest = a1, a2
+        else:
+            dest, src = a1, a2
 
     if not src or not os.path.isfile(src):
         print("[!] Could not locate system opencode ELF executable to patch.")
