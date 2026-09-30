@@ -1017,7 +1017,6 @@ function drawGraph() {
 
   ctx.restore();
 }
-}
 
 // ─────────────────────────────────────────────────────────────
 // CANVAS INTERACTION (PAN, ZOOM, DRAG, INSPECT)
