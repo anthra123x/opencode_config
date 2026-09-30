@@ -9,6 +9,7 @@ Standard JSON-RPC 2.0 stdio Model Context Protocol (MCP) server.
 import sys
 import json
 import os
+import re
 import sqlite3
 import datetime
 import subprocess
@@ -315,6 +316,35 @@ TOOLS = [
                 "project": {"type": "string", "description": "Project identifier (optional)"}
             }
         }
+    },
+    {
+        "name": "record_project_learning",
+        "description": "Records an engineering lesson, bug root-cause & fix, failure gotcha, or refined convention into persistent context memory so that all current and future subagents avoid repeating mistakes and continuously improve.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "lesson": {"type": "string", "description": "The insight, rule, or learning to retain for future turns and agents"},
+                "trigger_context": {"type": "string", "description": "What triggered or caused this learning (e.g. failing test, race condition, syntax incompatibility, edge case)"},
+                "solution_or_rule": {"type": "string", "description": "The exact solution, rule, or best practice to apply"},
+                "category": {"type": "string", "description": "Category: 'gotcha', 'testing', 'architecture', 'security', 'convention', 'performance' (defaults to 'gotcha')"},
+                "tags": {"type": "string", "description": "Optional comma-separated tags (e.g. 'tdd,sqlite,bun')"},
+                "agent_name": {"type": "string", "description": "Agent recording the learning (e.g. 'backend', 'qa-auditor')"},
+                "project": {"type": "string", "description": "Project identifier (optional)"}
+            },
+            "required": ["lesson"]
+        }
+    },
+    {
+        "name": "get_project_learnings",
+        "description": "Retrieves persistent engineering lessons, bug resolutions, and learned conventions for the project to guide current tasks.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Optional search term to filter learnings"},
+                "category": {"type": "string", "description": "Optional category filter"},
+                "project": {"type": "string", "description": "Project identifier (optional)"}
+            }
+        }
     }
 ]
 
@@ -512,6 +542,23 @@ def tool_get_session_bootstrap(args):
         except Exception:
             pass
 
+    # Fetch continuous project learnings
+    learnings_summary = []
+    try:
+        mem_conn = get_db()
+        cur_l = mem_conn.execute("""
+            SELECT key, content, tags, updated_at
+            FROM memories
+            WHERE (project = ? OR project = 'global') AND (category = 'learning' OR key LIKE 'learning:%')
+            ORDER BY updated_at DESC LIMIT 5
+        """, (project,))
+        l_rows = cur_l.fetchall()
+        if l_rows:
+            for r in l_rows:
+                learnings_summary.append(f"• {r['content']}")
+    except Exception:
+        pass
+
     out = [
         f"╔══════════════════════════════════════════════════════════════╗",
         f"║  ⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫  |  Project: {project:<15} ║",
@@ -520,6 +567,9 @@ def tool_get_session_bootstrap(args):
         "\n## 👥 Team Board Status",
         "\n".join(team_summary) if team_summary else "• Ready for initial task breakdown and assignment."
     ]
+    if learnings_summary:
+        out.append("\n## 🧠 Retroalimentación y Aprendizajes del Proyecto (Continuous Learning)")
+        out.extend(learnings_summary)
     return "\n".join(out)
 
 def tool_sync_project_context(args):
@@ -814,6 +864,87 @@ def tool_verify_context_integrity(args):
         f"  Persistence is 100% active. Zero compaction required."
     )
 
+def tool_record_project_learning(args):
+    project = get_current_project(args.get("project"))
+    lesson = args.get("lesson", "").strip()
+    if not lesson:
+        return "Error: 'lesson' is required."
+
+    category = args.get("category", "gotcha").strip().lower()
+    trigger = args.get("trigger_context", "").strip()
+    solution = args.get("solution_or_rule", "").strip()
+    agent_name = args.get("agent_name", "swarm").strip().lower()
+    user_tags = args.get("tags", "").strip()
+
+    slug = re.sub(r'[^a-z0-9]+', '_', lesson[:30].lower()).strip('_') or "insight"
+    timestamp = int(time.time())
+    key = f"learning:{category}:{slug}_{timestamp}"
+
+    content_parts = [f"**Lesson**: {lesson}"]
+    if trigger:
+        content_parts.append(f"**Trigger**: {trigger}")
+    if solution:
+        content_parts.append(f"**Solution/Rule**: {solution}")
+    if agent_name:
+        content_parts.append(f"**Discovered by**: @{agent_name}")
+    content = " | ".join(content_parts)
+
+    tags = f"learning, retroalimentacion, {category}"
+    if user_tags:
+        tags += f", {user_tags}"
+
+    tool_remember({
+        "key": key,
+        "content": content,
+        "category": "learning",
+        "project": project,
+        "tags": tags
+    })
+
+    return f"✓ Project learning recorded in [{project}]: '{lesson}'. Persisted to continuous feedback loop."
+
+def tool_get_project_learnings(args):
+    project = get_current_project(args.get("project"))
+    query = args.get("query", "").strip()
+    category = args.get("category", "").strip().lower()
+
+    conn = get_db()
+    if query:
+        sql = """
+            SELECT m.key, m.content, m.tags, m.updated_at
+            FROM memories m
+            JOIN memories_fts f ON m.id = f.rowid
+            WHERE memories_fts MATCH ? AND (m.project = ? OR m.project = 'global') AND (m.category = 'learning' OR m.key LIKE 'learning:%')
+            ORDER BY m.updated_at DESC LIMIT 15
+        """
+        cur = conn.execute(sql, (f'"{query}"', project))
+    else:
+        if category:
+            sql = """
+                SELECT key, content, tags, updated_at
+                FROM memories
+                WHERE (project = ? OR project = 'global') AND category = 'learning' AND tags LIKE ?
+                ORDER BY updated_at DESC LIMIT 15
+            """
+            cur = conn.execute(sql, (project, f"%{category}%"))
+        else:
+            sql = """
+                SELECT key, content, tags, updated_at
+                FROM memories
+                WHERE (project = ? OR project = 'global') AND (category = 'learning' OR key LIKE 'learning:%')
+                ORDER BY updated_at DESC LIMIT 15
+            """
+            cur = conn.execute(sql, (project,))
+
+    rows = cur.fetchall()
+    if not rows:
+        return f"No project learnings recorded yet for [{project}]. Use record_project_learning to anchor team insights."
+
+    out = [f"# 🧠 Aprendizajes y Retroalimentación Continua [{project}]"]
+    for r in rows:
+        out.append(f"• **{r['key']}**: {r['content']}")
+    return "\n".join(out)
+
 TOOL_HANDLERS = {
     "remember": tool_remember,
     "recall": tool_recall,
@@ -828,6 +959,8 @@ TOOL_HANDLERS = {
     "trigger_auto_checkpoint": tool_trigger_auto_checkpoint,
     "auto_track_turn": tool_auto_track_turn,
     "verify_context_integrity": tool_verify_context_integrity,
+    "record_project_learning": tool_record_project_learning,
+    "get_project_learnings": tool_get_project_learnings,
 }
 
 # MCP JSON-RPC Stdio Loop

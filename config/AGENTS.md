@@ -85,11 +85,13 @@ La memoria persistente permite conservar contexto, reglas de negocio, preferenci
    recall(query="jwt secret rotation", category="architecture")
    ```
 
-### Cuándo Registrar en Memoria (`remember`):
+### Cuándo Registrar en Memoria (`remember` y `record_project_learning`):
 - **Decisiones Arquitectónicas**: Decisiones clave sobre bibliotecas, frameworks, patrones (ej: "usar Zustand para estado global", "PostgreSQL con UUIDv7").
 - **Preferencias del Usuario**: Estilos de codificación, stack preferido, diseño oscuro, convenciones de nombres.
-- **Resolución de Bugs Críticos**: Causa raíz de un fallo sutil y cómo evitar que se repita.
-- **Convenciones de Proyecto**: Formato de rutas, estructura de carpetas, reglas de validación.
+- **Aprendizajes y Retroalimentación Continua (`record_project_learning`)**:
+  - Causa raíz de un fallo sutil, un gotcha de testing o una incompatibilidad, y cómo resolverlo.
+  - Al alimentar este bucle, todos los subagentes consultan automáticamente las lecciones vía `get_session_bootstrap()` y `get_project_learnings()`, previniendo errores recurrentes y refinando su desempeño con el proyecto.
+- **Panel Web Exclusivamente de Telemetría**: El dashboard web es estrictamente un monitor pasivo en tiempo real (estado de agentes, tablero Kanban, grafo GetBrain y salud de pruebas). No contiene ni requiere acciones manuales de guardado ni checkpoints de usuario.
 
 ---
 

@@ -148,11 +148,14 @@ La arquitectura del enjambre se sustenta en **4 servidores MCP nativos** desarro
 - **Ubicación de base de datos**: `~/.opencode/memory/context_memory.db`.
 - **Motor de indexación**: SQLite **FTS5** para búsquedas de texto completo de alta velocidad.
 - **Rastreo 100% Autónomo**: Invoca `auto_track_turn` automáticamente al final de cada turno sin requerir puntos de guardado manuales del usuario.
+- **Retroalimentación Continua**: Herramientas nativas para anclar lecciones técnicas, gotchas y resoluciones que mejoran el rendimiento futuro del enjambre.
 - **Herramientas**:
   - `remember`: Almacena decisiones (`architecture`, `convention`, `decision`, `learning`, `user_preference`).
   - `recall`: Búsqueda semántica y FTS5 con cálculo de relevancia BM25.
+  - `record_project_learning`: Registra lecciones, causas raíz y soluciones aprendidas en el proyecto.
+  - `get_project_learnings`: Consulta aprendizajes y retroalimentación acumulada.
   - `auto_track_turn`: Registro persistente automático por turno.
-  - `get_active_context` & `get_session_bootstrap`: Inicialización instantánea con contexto y tareas previas.
+  - `get_active_context` & `get_session_bootstrap`: Inicialización instantánea con contexto, tareas previas y aprendizajes activos.
   - `checkpoint_session` & `get_session_checkpoint`: Congelamiento y recuperación de puntos de control.
 
 ### 2. Bus de Coordinación y Tareas (`team-collab`)
@@ -177,8 +180,9 @@ La arquitectura del enjambre se sustenta en **4 servidores MCP nativos** desarro
   - `ARCH-001`: Principio de Responsabilidad Única (SRP) y manejo explícito de errores.
   - `HANDOFF-001`: Contratos de interfaz tipados antes del traspaso.
 - **Auditoría de Entregables**: Ninguna tarea puede cerrarse si Sentinel detecta incumplimiento (`sentinel_audit_task`).
+- **Retroalimentación Automática**: Vuelca de forma autónoma cualquier infracción y su resolución en `context-memory` para que ningún subagente repita el error.
 - **Herramientas**:
-  - `sentinel_audit_task`, `sentinel_get_rules`, `sentinel_verify_compliance`, `sentinel_report_violation`, `sentinel_certify_task`, `sentinel_get_compliance_report`.
+  - `sentinel_audit_task`, `sentinel_get_rules`, `sentinel_verify_compliance`, `sentinel_record_violation`, `sentinel_resolve_violation`, `sentinel_get_compliance_report`.
 
 ### 4. Motor de Pruebas en Tiempo Real (`swarm-tester`)
 - **Ubicación de base de datos**: `~/.opencode/tester/tester.db`.
@@ -186,7 +190,21 @@ La arquitectura del enjambre se sustenta en **4 servidores MCP nativos** desarro
 - **Sondeo en Vivo de Endpoints (`tester_probe_endpoint`)**: Valida latencia en milisegundos y respuestas HTTP 200 de servidores web, APIs y microservicios locales.
 - **Verificación Estática de Componentes (`tester_verify_component`)**: Analiza árboles AST en Python, balanceo de corchetes en TypeScript/JSX, accesibilidad y suites unitarias asociadas.
 - **Puente Tester ↔ Sentinel (`tester_sync_with_sentinel`)**: Si los tests pasan, certifica la tarea; si fallan, registra de inmediato la violación y alerta al equipo en `team-collab`.
+- **Retroalimentación en Memoria**: Notifica automáticamente a `context-memory` los fallos de regresión y las recuperaciones exitosas para aprendizaje continuo.
 - **Scorecard de Salud Global (`tester_get_live_health`)**: Estado en tiempo real (`HEALTHY`, `DEGRADED`, `FAILING`).
+
+---
+
+## 🔄 Bucle Autónomo de Retroalimentación & Auto-Mejora
+
+El sistema OpenCode Swarm está diseñado para **auto-perfeccionarse con el uso**:
+
+1. **Independencia Total de MCPs y Subagentes**: Cada componente opera de forma desacoplada y asíncrona. No se requiere intervención manual del usuario.
+2. **Retroalimentación Cruzada Automática**:
+   - Cuando `@backend` o `@qa-auditor` resuelve un fallo detectado por `swarm-tester`, la lección aprendida se guarda en `context-memory`.
+   - Cuando `swarm-sentinel` audita un entregable o resuelve una infracción, la regla refinada queda registrada en la memoria del proyecto.
+   - En cada nuevo arranque o turno, `get_session_bootstrap()` inyecta automáticamente estos aprendizajes a los subagentes, evitando tropiezos recurrentes y alineando al equipo con las particularidades del repositorio.
+3. **Panel Web 100% Telemetría y Monitoreo**: El panel web (`http://localhost:4040`) es **estrictamente de monitoreo pasivo en tiempo real**. No contiene botones de guardado manual ni exige al usuario crear puntos de control: los checkpoints, tareas y sincronizaciones se generan de forma 100% autónoma y transparente en segundo plano.
 
 ---
 

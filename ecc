@@ -20,7 +20,6 @@ find_mcp_server() {
     "$ECC_CONFIG/swarm/mcp/$name/server.py"
     "$HOME/.config/opencode/swarm/mcp/$name/server.py"
     "$REPO_DIR/mcp/$name/server.py"
-    "/home/omicron/Documentos/opencode_config/mcp/$name/server.py"
   )
   for p in "${candidates[@]}"; do
     if [ -f "$p" ]; then
@@ -37,7 +36,6 @@ find_web_server() {
     "$ECC_CONFIG/swarm/web/server.py"
     "$HOME/.config/opencode/swarm/web/server.py"
     "$REPO_DIR/web/server.py"
-    "/home/omicron/Documentos/opencode_config/web/server.py"
   )
   for p in "${candidates[@]}"; do
     if [ -f "$p" ]; then

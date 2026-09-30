@@ -211,6 +211,27 @@ def alert_swarm_feed(sender, message, category="warning", priority="high", proje
         except Exception:
             pass
 
+def record_sentinel_learning(project, agent_name, lesson, trigger, solution, category="convention"):
+    """Persists engineering audit discoveries and rule resolutions into context-memory for continuous swarm improvement."""
+    try:
+        mem_db_path = Path(os.environ.get("OPENCODE_MEMORY_DB", Path.home() / ".opencode" / "memory" / "context_memory.db"))
+        if not mem_db_path.exists():
+            return
+        conn = sqlite3.connect(str(mem_db_path), timeout=10.0, factory=ManagedConnection)
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        clean_slug = re.sub(r'[^a-z0-9]+', '_', lesson[:30].lower()).strip('_') or "rule"
+        key = f"learning:sentinel:{clean_slug}_{int(time.time())}"
+        content = f"**Lesson**: {lesson} | **Trigger**: {trigger} | **Solution/Rule**: {solution} | **Enforced by**: @swarm-sentinel for @{agent_name}"
+        tags = f"learning, retroalimentacion, sentinel, {category}"
+        with conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO memories (key, category, content, tags, project, created_at, updated_at)
+                VALUES (?, 'learning', ?, ?, ?, ?, ?)
+            """, (key, content, tags, project, now, now))
+        conn.close()
+    except Exception:
+        pass
+
 # Tool Definitions
 TOOLS = [
     {
@@ -376,7 +397,7 @@ def tool_sentinel_audit_task(args):
                 VALUES (?, ?, ?, ?, ?, 'open', ?)
             """, (project, agent_name, v["code"], v["severity"], v["detail"], now))
 
-    # Alert swarm if rejected
+    # Alert swarm and record learning feedback
     if verdict == "REJECTED":
         alert_swarm_feed(
             sender="swarm-sentinel",
@@ -385,6 +406,9 @@ def tool_sentinel_audit_task(args):
             priority="high",
             project=project
         )
+        record_sentinel_learning(project, agent_name, f"Audit rejected: {task_title}", "; ".join(v['code'] for v in violations), "; ".join(feedback), "audit")
+    else:
+        record_sentinel_learning(project, agent_name, f"Audit approved: {task_title}", "All quality checks passed", "Engineering standards verified", "compliance")
 
     badge = "🟢 PASSED" if verdict == "APPROVED" else "🔴 REJECTED"
     lines = [
@@ -464,6 +488,7 @@ def tool_sentinel_record_violation(args):
         priority="high",
         project=project
     )
+    record_sentinel_learning(project, agent_name, f"Rule violation logged: [{rule_code}]", details, f"Corrective action required under rule {rule_code}", "violation")
 
     return f"✓ Violation #{v_id} [{rule_code}] logged for @{agent_name} in [{project}]. Swarm notified."
 
@@ -493,6 +518,7 @@ def tool_sentinel_resolve_violation(args):
         priority="normal",
         project=project
     )
+    record_sentinel_learning(project, "swarm", f"Violation #{v_id} resolved", notes or "Corrective criteria fulfilled", "Best practice reinforced", "resolution")
 
     return f"✓ Violation #{v_id} marked as RESOLVED in [{project}]."
 

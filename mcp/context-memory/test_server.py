@@ -103,6 +103,27 @@ class TestContextMemoryServer(unittest.TestCase):
         chk = server.tool_get_session_checkpoint({"project": "auto-test-app"})
         self.assertIn("User authentication endpoints", chk)
 
+    def test_record_and_get_project_learning(self):
+        res = server.tool_record_project_learning({
+            "project": "learn-proj",
+            "lesson": "Vitest requires globals:true in vite.config.ts",
+            "trigger_context": "ReferenceError: describe is not defined",
+            "solution_or_rule": "Configure globals: true under test block",
+            "category": "testing",
+            "agent_name": "qa-auditor"
+        })
+        self.assertIn("Project learning recorded", res)
+
+        # Retrieve learnings
+        learnings = server.tool_get_project_learnings({"project": "learn-proj"})
+        self.assertIn("Vitest requires globals:true", learnings)
+        self.assertIn("@qa-auditor", learnings)
+
+        # Verify it appears in bootstrap
+        bootstrap = server.tool_get_session_bootstrap({"project": "learn-proj"})
+        self.assertIn("Retroalimentación y Aprendizajes del Proyecto", bootstrap)
+        self.assertIn("Vitest requires globals:true", bootstrap)
+
 if __name__ == "__main__":
     unittest.main()
 

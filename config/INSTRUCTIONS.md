@@ -198,4 +198,9 @@ Para garantizar estabilidad absoluta, cero caídas en la delegación y cumplimie
    - Los resultados de testing se sincronizan automáticamente con Sentinel (`tester_sync_with_sentinel`). Si una aserción falla, se emite una alerta prioritaria en `team-collab` y se bloquea la aprobación de la tarea.
    - La telemetría en tiempo real se visualiza en el panel web (http://localhost:4040/#tester) o en terminal mediante `ecc test --watch`.
 
+5. **Bucle Autónomo de Retroalimentación y Auto-Perfeccionamiento (`record_project_learning`)**:
+   - Cada vez que un agente supere un escollo técnico, incompatibilidad de librerías o resuelva un fallo detectado por Sentinel o Live Tester, invoca `record_project_learning(lesson="...", trigger_context="...", solution_or_rule="...", category="...")`.
+   - `get_session_bootstrap()` y `get_project_learnings()` nutren a los subagentes con estos aprendizajes en cada turno, asegurando que el equipo refine continuamente su rendimiento en el proyecto sin intervención humana.
+   - **El Panel Web es Exclusivamente de Telemetría**: El dashboard web (`http://localhost:4040`) es un monitor pasivo en tiempo real para observar el estado del enjambre, tareas, grafo GetBrain y salud de pruebas. No incluye ni requiere acciones manuales de guardado ni checkpoints de usuario.
+
 

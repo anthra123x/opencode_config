@@ -188,6 +188,27 @@ def notify_sentinel(project, rule_code, violation_msg=None):
     except Exception:
         pass
 
+def record_feedback_learning(project, lesson, trigger, solution, category="testing"):
+    """Silently persists test discoveries or resolutions into context-memory for continuous swarm improvement."""
+    try:
+        mem_db_path = Path(os.environ.get("OPENCODE_MEMORY_DB", Path.home() / ".opencode" / "memory" / "context_memory.db"))
+        if not mem_db_path.exists():
+            return
+        conn = sqlite3.connect(str(mem_db_path), timeout=10.0, factory=ManagedConnection)
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        clean_slug = re.sub(r'[^a-z0-9]+', '_', lesson[:30].lower()).strip('_') or "test"
+        key = f"learning:{category}:{clean_slug}_{int(time.time())}"
+        content = f"**Lesson**: {lesson} | **Trigger**: {trigger} | **Solution/Rule**: {solution} | **Discovered by**: @swarm-tester"
+        tags = f"learning, retroalimentacion, {category}"
+        with conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO memories (key, category, content, tags, project, created_at, updated_at)
+                VALUES (?, 'learning', ?, ?, ?, ?, ?)
+            """, (key, content, tags, project, now, now))
+        conn.close()
+    except Exception:
+        pass
+
 # Test Runner Detection & Parsing
 def detect_runner(ws_dir, target_path=""):
     """Detect available test runner for the workspace or target path."""
@@ -538,14 +559,16 @@ def tool_tester_run_suite(args):
         """, (project, runner, target_path, status, total, passed, failed, skipped, coverage, duration_ms, full_output[:4000], now))
     conn.close()
 
-    # Bridge to Sentinel and Team Collab
+    # Bridge to Sentinel, Team Collab and Context Memory Feedback Loop
     if status == "FAIL":
         fail_summary = f"Automated tests failed ({failed}/{total} failed, runner: {runner}). Output snippet:\n{full_output[:300]}"
         notify_sentinel(project, "TDD-001", fail_summary)
         broadcast_test_alert(project, f"🚨 Test suite failed: {failed} failed test(s). Check output in Live Tester.", "testing", "high")
+        record_feedback_learning(project, f"Test failure detected in {runner}", fail_summary, "Fix failing assertions before completing task", "testing")
     elif status == "PASS":
         notify_sentinel(project, "TDD-001", None)
         broadcast_test_alert(project, f"✅ Test suite passing: {passed}/{total} tests green ({duration_ms}ms).", "testing", "normal")
+        record_feedback_learning(project, f"Test suite passing ({passed}/{total} green)", f"Runner: {runner}, duration: {duration_ms}ms", "Suite verified green without regressions", "testing")
 
     report = [
         f"══════════════════════════════════════════════════════════",

@@ -222,35 +222,28 @@ if echo "$CHOICES" | grep -q "MCP" && [ -d "$REPO_DIR/mcp" ]; then
 
   # Also copy to swarm/mcp if present
   if [ -d "$CONFIG_DIR/swarm/mcp" ]; then
-    mkdir -p "$CONFIG_DIR/swarm/mcp/swarm-tester"
-    cp -r "$REPO_DIR/mcp/swarm-tester/"* "$CONFIG_DIR/swarm/mcp/swarm-tester/"
-    chmod +x "$CONFIG_DIR/swarm/mcp/swarm-tester/server.py"
+    for srv in context-memory team-collab swarm-sentinel swarm-tester; do
+      mkdir -p "$CONFIG_DIR/swarm/mcp/$srv"
+      cp -r "$REPO_DIR/mcp/$srv/"* "$CONFIG_DIR/swarm/mcp/$srv/"
+      chmod +x "$CONFIG_DIR/swarm/mcp/$srv/server.py"
+    done
   fi
 
   # Create executable wrappers in ~/.local/bin
-  cat > "$LOCAL_BIN/opencode-context-memory" <<EOF
+  for srv in context-memory team-collab swarm-sentinel swarm-tester; do
+    cat > "$LOCAL_BIN/opencode-$srv" <<EOF
 #!/usr/bin/env bash
-exec python3 "$CONFIG_DIR/mcp/context-memory/server.py" "\$@"
+if [ -f "$CONFIG_DIR/mcp/$srv/server.py" ]; then
+  exec python3 "$CONFIG_DIR/mcp/$srv/server.py" "\$@"
+elif [ -f "$CONFIG_DIR/swarm/mcp/$srv/server.py" ]; then
+  exec python3 "$CONFIG_DIR/swarm/mcp/$srv/server.py" "\$@"
+else
+  echo "[!] Cannot find server.py for $srv in $CONFIG_DIR" >&2
+  exit 1
+fi
 EOF
-  chmod +x "$LOCAL_BIN/opencode-context-memory"
-
-  cat > "$LOCAL_BIN/opencode-team-collab" <<EOF
-#!/usr/bin/env bash
-exec python3 "$CONFIG_DIR/mcp/team-collab/server.py" "\$@"
-EOF
-  chmod +x "$LOCAL_BIN/opencode-team-collab"
-
-  cat > "$LOCAL_BIN/opencode-swarm-sentinel" <<EOF
-#!/usr/bin/env bash
-exec python3 "$CONFIG_DIR/mcp/swarm-sentinel/server.py" "\$@"
-EOF
-  chmod +x "$LOCAL_BIN/opencode-swarm-sentinel"
-
-  cat > "$LOCAL_BIN/opencode-swarm-tester" <<EOF
-#!/usr/bin/env bash
-exec python3 "$CONFIG_DIR/mcp/swarm-tester/server.py" "\$@"
-EOF
-  chmod +x "$LOCAL_BIN/opencode-swarm-tester"
+    chmod +x "$LOCAL_BIN/opencode-$srv"
+  done
 
   log "Native MCP servers installed (context-memory, team-collab, swarm-sentinel, swarm-tester)"
 fi

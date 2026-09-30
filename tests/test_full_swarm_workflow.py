@@ -34,6 +34,16 @@ mem_spec = importlib.util.spec_from_file_location("context_memory_server", str(W
 mem_server = importlib.util.module_from_spec(mem_spec)
 mem_spec.loader.exec_module(mem_server)
 
+# Load sentinel server
+sentinel_spec = importlib.util.spec_from_file_location("sentinel_server", str(WORKSPACE_DIR / "mcp" / "swarm-sentinel" / "server.py"))
+sentinel_server = importlib.util.module_from_spec(sentinel_spec)
+sentinel_spec.loader.exec_module(sentinel_server)
+
+# Load tester server
+tester_spec = importlib.util.spec_from_file_location("tester_server", str(WORKSPACE_DIR / "mcp" / "swarm-tester" / "server.py"))
+tester_server = importlib.util.module_from_spec(tester_spec)
+tester_spec.loader.exec_module(tester_server)
+
 def log(msg):
     print(f"  ✓ {msg}")
 
@@ -205,6 +215,52 @@ def run_all_tests():
     log("GetBrain accurately models project modules, contracts, agents, and checkpoints.")
 
     # ─────────────────────────────────────────────────────────────────
+    header("STAGE 6: Autonomous Continuous Learning & Feedback Loop")
+    # 1. Record explicit engineering lesson from an agent
+    rec_res = mem_server.tool_record_project_learning({
+        "project": wf_proj,
+        "lesson": "SQLite WAL mode prevents reader/writer locking under concurrent swarm access",
+        "trigger_context": "Database is locked OperationalError",
+        "solution_or_rule": "Apply PRAGMA journal_mode=WAL and PRAGMA busy_timeout=30000",
+        "category": "architecture",
+        "agent_name": "backend"
+    })
+    assert "Project learning recorded" in rec_res
+    log("Explicit project learning persisted into continuous feedback loop.")
+
+    # 2. Autonomous feedback from Live Tester on test run
+    tester_server.record_feedback_learning(
+        wf_proj,
+        "FastAPI requires lifespan context manager instead of on_event",
+        "DeprecationWarning in startup event",
+        "Use asynccontextmanager lifespan(app)",
+        "testing"
+    )
+    log("Swarm Live Tester silently fed back execution lesson into context memory.")
+
+    # 3. Autonomous feedback from Sentinel on audit violation/resolution
+    sentinel_server.record_sentinel_learning(
+        wf_proj,
+        "qa-auditor",
+        "QA Auditor must verify all 6 stages of verification loop",
+        "Audit check failed for VERIF-001",
+        "Execute build, types, lint, tests, security and regression",
+        "audit"
+    )
+    log("Swarm Sentinel silently fed back audit compliance learning into context memory.")
+
+    # 4. Verify learnings query and session bootstrap hydration
+    learnings = mem_server.tool_get_project_learnings({"project": wf_proj})
+    assert "SQLite WAL mode" in learnings
+    assert "FastAPI requires lifespan" in learnings
+    assert "QA Auditor must verify" in learnings
+
+    bootstrap = mem_server.tool_get_session_bootstrap({"project": wf_proj})
+    assert "Retroalimentación y Aprendizajes del Proyecto" in bootstrap
+    assert "SQLite WAL mode" in bootstrap
+    log("Session Bootstrap automatically hydrated subagents with project feedback and learnings.")
+
+    # ─────────────────────────────────────────────────────────────────
     header("FINAL RESULT: 100% OF END-TO-END WORKFLOW ASSERTIONS PASSED!")
     print("""
   ╔══════════════════════════════════════════════════════════════════╗
@@ -215,6 +271,7 @@ def run_all_tests():
   ║  • Automatic Zero-Compaction Checkpoints: PASSED                ║
   ║  • Automatic Idle Transition on Task Complete: PASSED            ║
   ║  • GetBrain Architectural Knowledge Graph: PASSED               ║
+  ║  • Autonomous Continuous Learning & Feedback Loop: PASSED       ║
   ╚══════════════════════════════════════════════════════════════════╝
     """)
 
