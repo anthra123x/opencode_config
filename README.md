@@ -61,6 +61,23 @@
 
 OpenCode Swarm no solo amplía la inteligencia, sino que transforma completamente la interfaz y la presencia visual de OpenCode:
 
+- **Logo Central con Subtítulo Estilo Minecraft (`  ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ`)**:
+  - Directamente en la pantalla principal del TUI de OpenCode, al lado del gran logo en bloques de `opencode`, se renderiza el subtítulo tipográfico en bloques y versalitas (`  ꜱᴡᴀʀᴍ` / `  ᴇᴅɪᴛɪᴏɴ`) con el mismo estilo visual distintivo, emulando la estética clásica de Minecraft (*Java Edition*):
+    ```text
+                                     ▄     
+    █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+    █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀  ꜱᴡᴀʀᴍ
+    ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀  ᴇᴅɪᴛɪᴏɴ
+    ```
+- **Dirección Web de la Sesión Directamente Bajo el Prompt**:
+  - En la parte inferior inmediata de la caja donde se escribe el prompt (a la izquierda de los atajos `tab agents` y `ctrl+p commands`), OpenCode muestra la URL en vivo del panel web y puerto asignado a esa sesión/proyecto:
+    ```text
+    ~  ⚡ http://localhost:4040              tab agents  ctrl+p commands
+    ```
+    Si estás dentro de un repositorio Git, refleja la rama y la URL dedicada:
+    ```text
+    mi-proyecto:main  ⚡ http://localhost:4040    tab agents  ctrl+p commands
+    ```
 - **Lanzador Interactivo & Alias (`~/.local/bin/opencode` y `~/.local/bin/opencode-swarm`)**:
   - Intercepta la llamada a OpenCode para presentar en la terminal el banner distintivo de bienvenida, mostrando el alias de la herramienta, el proyecto activo y el puerto asignado al Web Cockpit:
     ```text

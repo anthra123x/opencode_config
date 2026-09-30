@@ -2,9 +2,13 @@
 # opencode — OpenCode Swarm Edition Launcher
 # Wraps vanilla opencode with per-project Swarm Web Cockpit sessions and terminal branding
 
-REAL_OPENCODE="/usr/bin/opencode"
-
-if [ ! -x "$REAL_OPENCODE" ]; then
+# Prefer customized Swarm Edition binary with Minecraft-style branding & session web URL
+SWARM_BIN="$HOME/.config/opencode/bin/opencode-swarm"
+if [ -x "$SWARM_BIN" ]; then
+  REAL_OPENCODE="$SWARM_BIN"
+elif [ -x "/usr/bin/opencode" ]; then
+  REAL_OPENCODE="/usr/bin/opencode"
+else
   REAL_OPENCODE=$(type -ap opencode | grep -v "$HOME/.local/bin/opencode" | head -n 1)
 fi
 

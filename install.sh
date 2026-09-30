@@ -315,7 +315,7 @@ log "ecc CLI installed to $LOCAL_BIN/ecc"
 # 10. Copy scripts & templates
 do_step "Installing management scripts..."
 mkdir -p "$CONFIG_DIR/scripts"
-for script in configure.sh uninstall.sh; do
+for script in configure.sh uninstall.sh patch_opencode_ui.py; do
   if [ -f "$REPO_DIR/scripts/$script" ]; then
     cp "$REPO_DIR/scripts/$script" "$CONFIG_DIR/scripts/$script"
     chmod +x "$CONFIG_DIR/scripts/$script"
@@ -325,6 +325,17 @@ done
 if [ -d "$REPO_DIR/templates" ]; then
   mkdir -p "$CONFIG_DIR/templates"
   cp -r "$REPO_DIR/templates/"* "$CONFIG_DIR/templates/" 2>/dev/null || true
+fi
+
+# 11. Customize OpenCode interface (Minecraft-style Swarm Edition logo & Web Cockpit footer)
+if [ -f "$REPO_DIR/scripts/patch_opencode_ui.py" ]; then
+  do_step "Customizing OpenCode interface (Minecraft-style Swarm Edition & Web Cockpit footer)..."
+  mkdir -p "$CONFIG_DIR/bin"
+  if python3 "$REPO_DIR/scripts/patch_opencode_ui.py" "$CONFIG_DIR/bin/opencode-swarm"; then
+    log "Swarm Edition customized binary installed to $CONFIG_DIR/bin/opencode-swarm"
+  else
+    warn "Binary interface customization skipped (falling back to wrapper styling)"
+  fi
 fi
 
 # Install OpenCode Swarm launcher wrapper

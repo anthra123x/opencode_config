@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""
+patch_opencode_ui.py — OpenCode Swarm Edition TUI Patcher
+
+Applies surgical binary patches to OpenCode (Bun single-file executable)
+with exact byte-length preservation:
+1. LOGO: Adds "  ꜱᴡᴀʀᴍ" / "  ᴇᴅɪᴛɪᴏɴ" in matching block/small-caps styling
+   right beside "opencode", matching Minecraft's "Java Edition" subtitle aesthetic.
+2. PROMPT FOOTER: Injects the active project Web Cockpit session URL
+   (e.g. "⚡ http://localhost:4040") into the location row directly below the prompt input.
+"""
+
+import sys
+import os
+import shutil
+import subprocess
+
+def find_system_opencode():
+    # Priority paths for vanilla opencode binary
+    candidates = [
+        "/usr/bin/opencode",
+        "/usr/local/bin/opencode",
+        os.path.expanduser("~/.bun/bin/opencode"),
+        os.path.expanduser("~/.npm-global/bin/opencode")
+    ]
+    for c in candidates:
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            # Ensure it is not our wrapper script
+            try:
+                with open(c, "rb") as f:
+                    header = f.read(4)
+                    if header == b"\x7fELF":
+                        return c
+            except Exception:
+                continue
+
+    # Fallback to which
+    which_out = shutil.which("opencode")
+    if which_out:
+        try:
+            with open(which_out, "rb") as f:
+                if f.read(4) == b"\x7fELF":
+                    return which_out
+        except Exception:
+            pass
+    return None
+
+def patch_binary(src_path, dst_path):
+    print(f"[*] Reading source binary: {src_path}")
+    with open(src_path, "rb") as f:
+        data = bytearray(f.read())
+
+    # --- 1. Patch Logo (am={left:..., right:...}) ---
+    pos_am = data.find(b"am={left:")
+    end_am = data.find(b"u0={left:")
+    if pos_am == -1 or end_am == -1 or pos_am >= end_am:
+        print("[!] Warning: Could not locate logo array 'am={left:' in binary")
+        return False
+
+    orig_am = bytes(data[pos_am:end_am])
+    orig_am_len = len(orig_am)
+
+    cand_smallcaps = """am={left:["                   ","\\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2584","\\u2588__\\u2588 \\u2588__\\u2588 \\u2588^^^ \\u2588__\\u2588","\\u2580\\u2580\\u2580\\u2580 \\u2588\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580 \\u2580~~\\u2580"],right:["             \\u2584     ","\\u2588\\u2580\\u2580\\u2580 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588 \\u2588\\u2580\\u2580\\u2588","\\u2588___ \\u2588__\\u2588 \\u2588__\\u2588 \\u2588^^^  ꜱᴡᴀʀᴍ","\\u2580\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580 \\u2580\\u2580\\u2580\\u2580  ᴇᴅɪᴛɪᴏɴ"]},"""
+    # Replace 12 occurrences of "\\u2580" (6 bytes) with "\u2580" UTF-8 (3 bytes) to balance byte count
+    cand_str = cand_smallcaps.replace("\\u2580", "\u2580", 12)
+    new_am = cand_str.encode("utf-8")
+
+    if len(new_am) != orig_am_len:
+        print(f"[!] Warning: Logo patch length mismatch: expected {orig_am_len}, got {len(new_am)}")
+        return False
+
+    data[pos_am:end_am] = new_am
+    print(f"[✓] Patched OpenCode logo with Minecraft-style 'ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ' subtitle ({orig_am_len} bytes)")
+
+    # --- 2. Patch Prompt Footer Location / Session Web URL ---
+    orig_prompt = b"""dn=c(()=>{if(!r.sessionID)return _.ref??C.location.default();if(ne()!=="idle")return;return C.session.get(r.sessionID)?.location}),zr=c(()=>{let Ie=Xe(),et=Ie?{directory:Ie}:dn();if(!et)return;let X=Al(et.directory,T.home),de=C.location.vcs.info(et)?.branch.current;return de?`${X}:${de}`:X}),[fn,gn]=w(se().width),_r=c(()=>{let Ie=zr();if(!Ie)return;return wL(Ie,fn())})"""
+    pos_prompt = data.find(orig_prompt)
+    if pos_prompt == -1:
+        print("[!] Warning: Could not locate prompt footer location expression in binary")
+        return False
+
+    orig_prompt_len = len(orig_prompt)
+    cand_prompt = b"""dn=c(()=>!r.sessionID?_.ref??C.location.default():ne()==="idle"?C.session.get(r.sessionID)?.location:void 0),zr=c(()=>{let I=Xe(),e=I?{directory:I}:dn();if(!e)return;let X=Al(e.directory,T.home),b=C.location.vcs.info(e)?.branch.current,u=Bun.env.OPENCODE_WEB_URL;return(b?`${X}:${b}`:X)+(u?`  \xe2\x9a\xa1 ${u}`:"")}),[fn,gn]=w(se().width),_r=c(()=>zr()?wL(zr(),fn()):void 0)"""
+    diff = orig_prompt_len - len(cand_prompt)
+    new_prompt = cand_prompt.replace(b":void 0)", b":" + b" "*diff + b"void 0)", 1)
+
+    if len(new_prompt) != orig_prompt_len:
+        print(f"[!] Warning: Prompt footer patch length mismatch: expected {orig_prompt_len}, got {len(new_prompt)}")
+        return False
+
+    data[pos_prompt:pos_prompt + orig_prompt_len] = new_prompt
+    print(f"[✓] Patched prompt footer location with active Web Cockpit URL ({orig_prompt_len} bytes)")
+
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(os.path.abspath(dst_path)), exist_ok=True)
+    with open(dst_path, "wb") as f:
+        f.write(data)
+    os.chmod(dst_path, 0o755)
+    print(f"[✓] Saved Swarm Edition binary to: {dst_path}")
+    return True
+
+def main():
+    dest = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/.config/opencode/bin/opencode-swarm")
+    src = sys.argv[2] if len(sys.argv) > 2 else find_system_opencode()
+
+    if not src or not os.path.isfile(src):
+        print("[!] Could not locate system opencode ELF executable to patch.")
+        sys.exit(1)
+
+    success = patch_binary(src, dest)
+    if not success:
+        print("[!] Failed to patch OpenCode binary.")
+        sys.exit(1)
+
+    # Test run
+    try:
+        res = subprocess.run([dest, "--version"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            print(f"[✓] Binary verified successfully: {res.stdout.strip()}")
+            sys.exit(0)
+        else:
+            print(f"[!] Verification failed: {res.stderr}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"[!] Verification execution error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
