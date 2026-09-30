@@ -154,6 +154,13 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(PUBLIC_DIR), **kwargs)
 
+    def end_headers(self):
+        # Force no-cache on all responses (CSS, JS, HTML, API) so browser never retains stale files
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def log_message(self, format, *args):
         try:
             msg = format % args
@@ -419,9 +426,35 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
         # 6c. API: Swarm Live Tester Status & Runs
         if url == "/api/tester":
             proj = self.server.project_name
+            proj_dir = str(self.server.project_dir)
+            detected_runner = "none"
+            test_files = []
+            if tester_server:
+                try:
+                    detected_runner = tester_server.detect_runner(proj_dir)
+                except Exception:
+                    pass
+            try:
+                p_path = Path(proj_dir)
+                if (p_path / "tests").is_dir():
+                    test_files = [str(f.relative_to(p_path)) for f in (p_path / "tests").glob("*.py")][:10]
+                if not test_files:
+                    test_files = [str(f.relative_to(p_path)) for f in p_path.glob("**/test*.py")][:10]
+            except Exception:
+                pass
+
             tester_data = {
                 "project": proj,
+                "project_dir": proj_dir,
                 "health": "MONITORING",
+                "detected_runner": detected_runner,
+                "test_files": test_files,
+                "mcp_status": {
+                    "context_memory": "ONLINE (SQLite FTS5)",
+                    "team_collab": "ONLINE (Bus Activo)",
+                    "swarm_sentinel": "ONLINE (7 Reglas)",
+                    "swarm_tester": "ONLINE (Continuo)"
+                },
                 "runs": [],
                 "probes": [],
                 "components": []
@@ -435,7 +468,15 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
                         WHERE project = ? OR project = 'default'
                         ORDER BY id DESC LIMIT 15
                     """, (proj,))
-                    tester_data["runs"] = [dict(r) for r in cur_runs.fetchall()]
+                    runs = [dict(r) for r in cur_runs.fetchall()]
+                    if not runs:
+                        cur_fb = t_conn.execute("""
+                            SELECT id, runner, target_path, status, total_tests, passed, failed, skipped, coverage_percent, duration_ms, created_at
+                            FROM tester_runs
+                            ORDER BY id DESC LIMIT 10
+                        """)
+                        runs = [dict(r) for r in cur_fb.fetchall()]
+                    tester_data["runs"] = runs
 
                     cur_probes = t_conn.execute("""
                         SELECT id, url, method, expected_status, actual_status, latency_ms, status, created_at
@@ -443,7 +484,11 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
                         WHERE project = ? OR project = 'default'
                         ORDER BY id DESC LIMIT 15
                     """, (proj,))
-                    tester_data["probes"] = [dict(r) for r in cur_probes.fetchall()]
+                    probes = [dict(r) for r in cur_probes.fetchall()]
+                    if not probes:
+                        cur_p_fb = t_conn.execute("SELECT id, url, method, expected_status, actual_status, latency_ms, status, created_at FROM endpoint_probes ORDER BY id DESC LIMIT 10")
+                        probes = [dict(r) for r in cur_p_fb.fetchall()]
+                    tester_data["probes"] = probes
 
                     cur_comps = t_conn.execute("""
                         SELECT id, file_path, check_type, status, details, duration_ms, created_at
@@ -451,7 +496,11 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
                         WHERE project = ? OR project = 'default'
                         ORDER BY id DESC LIMIT 15
                     """, (proj,))
-                    tester_data["components"] = [dict(r) for r in cur_comps.fetchall()]
+                    comps = [dict(r) for r in cur_comps.fetchall()]
+                    if not comps:
+                        cur_c_fb = t_conn.execute("SELECT id, file_path, check_type, status, details, duration_ms, created_at FROM component_checks ORDER BY id DESC LIMIT 10")
+                        comps = [dict(r) for r in cur_c_fb.fetchall()]
+                    tester_data["components"] = comps
                     t_conn.close()
 
                     latest_run = tester_data["runs"][0] if tester_data["runs"] else None

@@ -833,37 +833,40 @@ body.theme-linux {
 .legend-dot.memory   { background: var(--term-gray); }
 .legend-dot.module   { background: var(--text-dim); }
 
-/* Node Inspector Drawer */
+/* Node Inspector Overlay (Floating inside Canvas) */
 .node-inspector {
-  position: fixed;
-  top: 46px;
-  right: -360px;
+  display: none;
+  position: absolute;
+  top: 12px;
+  right: 12px;
   width: 360px;
-  height: calc(100vh - 46px);
-  background: var(--bg-surface);
-  border-left: 1px solid var(--border);
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.5);
-  display: flex;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
   flex-direction: column;
-  transition: right 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 60;
+  overflow: hidden;
 }
 .node-inspector.open {
-  right: 0;
+  display: flex !important;
 }
 .inspector-header {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-card);
+  background: var(--bg-surface);
 }
 .inspector-badge {
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   color: var(--term-blue);
-  background: var(--bg-subtle);
+  background: var(--bg-base);
   border: 1px solid var(--border);
   padding: 1px 6px;
   border-radius: var(--radius-xs);
@@ -873,31 +876,35 @@ body.theme-linux {
   border: none;
   color: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
+  padding: 2px 4px;
 }
 .btn-close:hover {
   color: var(--text-title);
 }
 
 .inspector-body {
-  padding: 14px;
+  padding: 12px;
   overflow-y: auto;
   flex: 1;
 }
 .insp-title {
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-title);
+  word-break: break-all;
   margin-bottom: 2px;
 }
 .insp-meta {
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-dim);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .insp-section {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .insp-section label {
   font-size: 10px;
@@ -916,8 +923,9 @@ body.theme-linux {
   color: var(--text-main);
   white-space: pre-wrap;
   font-family: var(--font-mono);
-  max-height: 240px;
+  max-height: 220px;
   overflow-y: auto;
+  word-break: break-word;
 }
 .insp-connections {
   display: flex;
@@ -939,6 +947,88 @@ body.theme-linux {
 .conn-pill:hover {
   border-color: var(--border-active);
   background: var(--bg-card);
+}
+
+/* Sentinel Rules Cards (Telemetry) */
+.rule-card {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  transition: var(--transition);
+}
+.rule-card:hover {
+  border-color: var(--border-muted);
+}
+.rule-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.rule-code {
+  font-weight: 700;
+  font-size: 10px;
+}
+.rule-title {
+  font-weight: 600;
+  color: var(--text-title);
+  font-size: 11px;
+  flex: 1;
+}
+.rule-agent {
+  font-size: 9px;
+  color: var(--term-blue);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+}
+.rule-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* Diagnostic Box for Telemetry */
+.diagnostic-box {
+  background: var(--bg-base);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-xs);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.diag-header {
+  color: var(--term-blue);
+  font-weight: 700;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.diag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+}
+.diag-label {
+  color: var(--text-dim);
+}
+.diag-val {
+  color: var(--text-title);
+  font-weight: 600;
+  text-align: right;
+  word-break: break-all;
 }
 
 /* ─────────────────────────────────────────────────────────────
