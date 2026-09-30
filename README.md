@@ -223,11 +223,12 @@ El instalador interactivo (`install.sh`):
 1. Detecta tu entorno (OpenCode, Python 3 con FTS5, Bash y Git).
 2. Pregunta si deseas instalación **Quickstart** (recomendada) o **Personalizada**.
 3. Instala los 6 agentes en `~/.config/opencode/agents/`.
-4. Instala y valida los servidores MCP nativos en `~/.config/opencode/mcp/`.
+4. Instala y valida los 4 servidores MCP nativos en `~/.config/opencode/mcp/`.
 5. Configura `opencode.jsonc`, `opencode.json`, `tui.json`, `AGENTS.md` e `INSTRUCTIONS.md`.
-6. Enlaza los ejecutables de soporte (`ecc`, `opencode-context-memory`, `opencode-team-collab`) en `~/.local/bin/`.
-7. Instala el servidor web local y GetBrain en `~/.config/opencode/web/`.
-8. Instala el wrapper visual con la tipografía estilizada.
+6. Enlaza los ejecutables de soporte (`ecc`, `opencode-context-memory`, `opencode-team-collab`, `opencode-swarm-sentinel`, `opencode-swarm-tester`) en `~/.local/bin/`.
+7. Instala el servidor web local, GetBrain y Live Tester en `~/.config/opencode/web/`.
+8. Personaliza quirúrgicamente el binario de OpenCode (`scripts/patch_opencode_ui.py`) con el logo estilo Minecraft y la URL de sesión web bajo el prompt.
+9. Instala el wrapper visual y los alias `opencode` y `opencode-swarm` en `~/.local/bin/`.
 
 ---
 
@@ -493,6 +494,7 @@ opencode_config/
 │   └── opencode-wrapper.sh       # Wrapper ejecutable con branding tipográfico y alias
 ├── scripts/
 │   ├── configure.sh              # Asistente de configuración de componentes
+│   ├── patch_opencode_ui.py      # Parcheador binario del TUI (logo Minecraft y footer URL)
 │   ├── test_swarm_session.py     # Suite de simulación de 7 turnos
 │   └── uninstall.sh              # Desinstalador limpio con respaldo
 └── lib/                          # Funciones auxiliares de Bash (ui, paths, utils)
