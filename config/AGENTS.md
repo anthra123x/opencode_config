@@ -67,6 +67,14 @@ La memoria persistente permite conservar contexto, reglas de negocio, preferenci
      ```
    - Recupera el estado exacto del proyecto, archivos modificados y próximos pasos con 100% de fidelidad.
 
+### Seguimiento Autónomo de Contexto (Zero Manual Checkpoints):
+1. **Rastreo Automático por Turno (`auto_track_turn`)**:
+   - `context-memory` opera de forma continua en segundo plano.
+   - Cada agente y orquestador invoca `auto_track_turn(project=..., turn_summary=..., decisions=..., files_touched=[...])` al finalizar pasos relevantes.
+   - El usuario nunca necesita recordar hacer un "punto de guardado" manual: el sistema indexa y persiste el contexto automáticamente.
+2. **Verificación de Integridad de Contexto (`verify_context_integrity`)**:
+   - Valida que SQLite WAL, GetBrain y los tableros de tareas permanezcan sincronizados sin desincronizaciones entre ventanas.
+
 ### Prioridad de Consulta Habitual:
 1. Al comenzar una sesión o recibir una instrucción compleja:
    ```python
@@ -94,3 +102,68 @@ Herramientas disponibles si el servidor está activo:
 - `trace_path`: Análisis de llamadas entrantes y salientes.
 - `get_code_snippet`: Extracción del cuerpo de una función o clase.
 - `query_graph`: Consultas Cypher para relaciones complejas.
+
+---
+
+## 4. Swarm Sentinel Protocol (`swarm-sentinel`) — Guardián de Reglas de Desarrollo
+
+El servidor MCP `swarm-sentinel` actúa como supervisor estricto y auditor de calidad continuo en todo el enjambre. Ningún agente puede dar por completada una tarea sin cumplir las reglas de ingeniería.
+
+### Reglas Inmutables de Desarrollo:
+- **`TDD-001`**: Cobertura obligatoria $\ge 80\%$ y pruebas unitarias/integración previas a la implementación.
+- **`VERIF-001`**: Ciclo de verificación en 6 etapas (sintaxis, unit tests, integración, types, linter, seguridad).
+- **`GIT-001`**: Commits bajo estándar estricto Conventional Commits 1.0 (`feat:`, `fix:`, `refactor:`, etc.).
+- **`UI-001`**: Motion táctil, diseño curado, micro-animaciones, cero placeholders y estética anti-slop.
+- **`SEC-001`**: Cero secretos, tokens o credenciales hardcodeadas; uso estricto de variables de entorno.
+- **`ARCH-001`**: Principio de Responsabilidad Única (SRP), desacoplamiento y manejo explícito de excepciones.
+- **`HANDOFF-001`**: Protocolo formal de contratos de interfaz entre `@backend` y `@frontend`.
+
+### Flujo de Auditoría Obligatoria:
+1. **Antes de cerrar tarea**:
+   El orquestador o especialista somete el entregable a:
+   ```python
+   sentinel_audit_task(
+     task_id=1,
+     agent_name="backend",
+     deliverables=["src/api/auth.py", "tests/test_auth.py"],
+     test_command="pytest tests/test_auth.py",
+     coverage_percent=92.5,
+     commit_message="feat(auth): add JWT rotation with refresh tokens",
+     security_checks_passed=True,
+     architectural_notes="SRP applied, env vars used for JWT secret"
+   )
+   ```
+2. **Rechazo y Alerta Automática**:
+   Si una regla es violada (ej: cobertura < 80% o mensaje de commit inválido), Sentinel **rechaza** el entregable, registra la infracción y emite automáticamente un aviso en `team-collab` para que el agente rectifique.
+3. **Mantenimiento del Bucle de Iteración**:
+   El orquestador no se detiene si un subagente sigue trabajando: usa `team_wait_for_task(task_id, timeout_seconds=30)` para esperar activamente el estado `ready_for_review` o `completed`.
+
+---
+
+## 5. Swarm Live Tester Protocol (`swarm-tester`) — Verificación en Tiempo Real y Blindaje Anti-Regresiones
+
+El servidor MCP `swarm-tester` y su plugin interactivo operan en tiempo real para verificar continuamente cada componente, endpoint, página y cambio de código introducido por los agentes, evitando regresiones, código roto o alucinaciones. Trabaja de la mano con `swarm-sentinel`.
+
+### Capacidades y Herramientas del Live Tester:
+1. **Ejecución Automatizada de Suites (`tester_run_suite`)**:
+   - Detección automática del test runner del proyecto (`pytest`, `vitest`, `jest`, `unittest`, `cargo test`, `go test`).
+   - Parseo instantáneo de aserciones (`passed`, `failed`, `total`) y porcentaje de cobertura (`coverage_percent`).
+   - Sincronización automática con `swarm-sentinel` (`auto_sync_sentinel=True`).
+2. **Sondeo en Vivo de Endpoints y Páginas Web (`tester_probe_endpoint`)**:
+   - Envía peticiones HTTP reales a servidores de desarrollo locales (ej: `http://localhost:4040/health`, APIs, SPAs).
+   - Valida códigos de respuesta esperados (200, 201), tiempo de latencia en milisegundos y patrones de texto en el body.
+3. **Verificación Estática de Componentes UI y Código (`tester_verify_component`)**:
+   - Comprueba sintaxis AST estricta (Python, TypeScript/JavaScript, CSS, HTML).
+   - Valida balanceo de llaves, corchetes y etiquetas.
+   - Detecta anti-patrones "slop" (como `TODO`, `FIXME`, placeholders o transiciones CSS genéricas).
+   - Localiza y ejecuta suites de pruebas unitarias co-localizadas (ej: `server.py` -> `test_server.py`).
+4. **Scorecard de Salud Global en Vivo (`tester_get_live_health`)**:
+   - Muestra estado consolidado: `HEALTHY`, `DEGRADED`, o `FAILING`.
+   - Accesible desde la web UI en `http://localhost:4040/#tester` y en la cabecera del Cockpit.
+5. **Comprobación Ultrarrápida de Modificaciones Git (`tester_quick_check`)**:
+   - Inspecciona archivos modificados en el árbol git y los verifica en milisegundos.
+6. **Puente Directo Tester ↔ Sentinel (`tester_sync_with_sentinel`)**:
+   - Si las pruebas pasan y la cobertura es $\ge 80\%$, certifica la tarea en Sentinel.
+   - Si una prueba falla o hay error de sintaxis, registra inmediatamente una infracción bajo `TDD-001` o `VERIF-001` y emite una alerta prioritaria en `team-collab`.
+
+

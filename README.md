@@ -24,14 +24,20 @@
 ## 📑 Tabla de Contenidos
 
 - [🌟 ¿Qué es OpenCode Swarm?](#-qué-es-opencode-swarm)
-- [🎨 Identidad Visual y Transformación TUI](#-identidad-visual-y-transformación-tui)
+- [🎨 Identidad Visual y Transformación de la Interfaz Principal](#-identidad-visual-y-transformación-de-la-interfaz-principal)
 - [👥 Roster de Sub-Agentes Especializados](#-roster-de-sub-agentes-especializados)
 - [🧠 Servidores MCP Nativos](#-servidores-mcp-nativos)
   - [1. Memoria Persistente de Contexto (`context-memory`)](#1-memoria-persistente-de-contexto-context-memory)
   - [2. Bus de Coordinación y Tareas (`team-collab`)](#2-bus-de-coordinación-y-tareas-team-collab)
+  - [3. Guardián de Reglas & Auditoría Continua (`swarm-sentinel`)](#3-guardián-de-reglas--auditoría-continua-swarm-sentinel)
+  - [4. Motor de Pruebas en Tiempo Real (`swarm-tester`)](#4-motor-de-pruebas-en-tiempo-real-swarm-tester)
 - [⚡ Slash Commands Disponibles](#-slash-commands-disponibles)
 - [🚀 Instalación y Puesta en Marcha](#-instalación-y-puesta-en-marcha)
 - [🛠️ CLI de Gestión: `ecc`](#️-cli-de-gestión-ecc)
+- [🧠 Swarm Cockpit, GetBrain & Live Tester: Sesiones Web Dedicadas](#-swarm-cockpit-getbrain--live-tester-sesiones-web-dedicadas-por-proyecto)
+- [⚡ Motor Zero-Compaction & Persistencia de Memoria de Contexto](#-motor-zero-compaction--persistencia-de-memoria-de-contexto)
+- [⚡ Sistema de Disparadores Reactivos Cross-Agent (Backend ➔ Frontend)](#-sistema-de-disparadores-reactivos-cross-agent-backend--frontend)
+- [🖥️ Flujo Multi-Ventana en Tiempo Real (Anti-Vuelco & Zero Locks)](#️-flujo-multi-ventana-en-tiempo-real-anti-vuelco--zero-locks)
 - [🔄 Flujo de Trabajo y Ciclo Cross-Sesión](#-flujo-de-trabajo-y-ciclo-cross-sesión)
 - [🧪 Simulación de Sesión y Verificación](#-simulación-de-sesión-y-verificación)
 - [📂 Estructura del Repositorio](#-estructura-del-repositorio)
@@ -51,15 +57,28 @@
 
 ---
 
-## 🎨 Identidad Visual y Transformación TUI
+## 🎨 Identidad Visual y Transformación de la Interfaz Principal
 
-OpenCode Swarm no solo amplía la inteligencia, sino que transforma completamente la presencia visual de la herramienta para acentuar que **ya no es la versión vanilla**:
+OpenCode Swarm no solo amplía la inteligencia, sino que transforma completamente la interfaz y la presencia visual de OpenCode:
 
-- **Tipografía Estilizada**: Encabezados, saludos y dashboards decorados con tipografía en versalitas: `⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫`.
-- **Integración con la Pestaña del Terminal**: Secuencias ANSI OSC que renombran dinámicamente tu terminal/pestaña a `⚡ ᴏᴘᴇɴᴄᴏᴅᴇ [ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ] — <nombre-proyecto>`.
-- **Tema TokyoNight (`config/tui.json`)**: Paleta oscura de alto contraste con diffs apilados (`diff_style: "stacked"`), navegación acelerada y soporte de ratón.
-- **Lanzador Wrapper (`templates/opencode-wrapper.sh` -> `~/.local/bin/opencode`)**: Intercepta la llamada a OpenCode para inyectar los metadatos visuales y presentar el banner de bienvenida antes del TUI.
-- **Plugin Swarm HUD (`config/plugins/team-hud.ts`)**: Inyecta en el ciclo de vida de OpenCode el estado de los agentes activos y la configuración por defecto.
+- **Lanzador Interactivo & Alias (`~/.local/bin/opencode` y `~/.local/bin/opencode-swarm`)**:
+  - Intercepta la llamada a OpenCode para presentar en la terminal el banner distintivo de bienvenida, mostrando el alias de la herramienta, el proyecto activo y el puerto asignado al Web Cockpit:
+    ```text
+    ⚡ OpenCode ── ⟪ SWARM EDITION v2.0 ⟫
+      ↳ Alias: opencode-swarm (Multi-Agent Autonomous Swarm & Live Verification)
+      ↳ Workspace: mi-proyecto | Cockpit: http://localhost:4040
+    ```
+- **Distintivos y Badges en la Interfaz Central de OpenCode**:
+  - Cada rol cuenta con un distintivo visual propio visible en el prompt interactivo y en la barra de estado:
+    - `⚡ [Swarm Lead]` para `@orchestrator` (Morado `#8B5CF6`)
+    - `🛡️ [Swarm Backend]` para `@backend` (Azul `#3B82F6`)
+    - `🎨 [Swarm Frontend]` para `@frontend` (Rosa Neón `#EC4899`)
+    - `🌿 [Swarm GitFlow]` para `@git-flow` (Verde Esmeralda `#10B981`)
+    - `🧪 [Swarm QA Auditor]` para `@qa-auditor` (Ámbar `#F59E0B`)
+    - `🐳 [Swarm DevOps]` para `@devops` (Cian `#06B6D4`)
+- **Integración con la Pestaña del Terminal**: Secuencias ANSI OSC que renombran dinámicamente tu terminal/pestaña a `⚡ ᴏᴘᴇɴᴄᴏᴅᴇ [ꜱᴡᴀʀᴍ] — <nombre-proyecto>`.
+- **Tema TokyoNight (`config/tui.json` y `cli.json`)**: Paleta oscura de alto contraste TokyoNight, diffs apilados (`diff_style: "stacked"`), navegación acelerada y soporte completo de ratón.
+- **Plugins OpenCode V2 (`team-hud` y `live-tester`)**: Inyectan los enlaces activos al Cockpit, GetBrain y Live Tester en el ciclo de vida de OpenCode sin errores ni advertencias.
 
 ---
 
@@ -67,74 +86,90 @@ OpenCode Swarm no solo amplía la inteligencia, sino que transforma completament
 
 Cada agente cuenta con su propio color de distintivo en el TUI, prompt operacional y paquete de skills:
 
-| Agente | Color | Modo | Rol & Responsabilidad | Skills Clave Integrados |
-|---|---|---|---|---|
-| **`@orchestrator`** | `#8B5CF6` (Morado) | `primary` (TAB) | **Líder Técnico & Arquitecto**: Coordina el enjambre, desglosa épicas en tareas, gestiona memoria y sintetiza entregables. | `council`, `code-tour`, `strategic-compact`, `agent-sort` |
-| **`@backend`** | `#3B82F6` (Azul) | `primary` (TAB) | **Ingeniero Backend & BD**: APIs REST/GraphQL, esquemas relacionales, migraciones y TDD estricto. | `postgres-patterns`, `prisma-patterns`, `mysql-patterns`, `database-migrations`, `tdd-workflow` |
-| **`@frontend`** | `#EC4899` (Rosa Neón) | `primary` (TAB) | **Ingeniero UI/UX & Motion**: Interfaces accesibles, diseño anti-slop, animaciones fluidas con resortes y tokens de diseño. | `impeccable`, `design-taste-frontend`, `emil-design-eng`, `review-animations`, `animation-vocabulary` |
-| **`@git-flow`** | `#10B981` (Verde Esmeralda) | `primary` (TAB) | **Control de Flujo Git & GitHub**: Commits semánticos, ramas seguras, resolución de conflictos y resúmenes de PR. | `git-flow-pro`, `verification-loop` |
-| **`@qa-auditor`** | `#F59E0B` (Ámbar) | `primary` (TAB) | **Auditor de Calidad & Test**: Loop de verificación en 6 etapas, cobertura $\ge$ 80%, auditorías OWASP y regresiones IA. | `verification-loop`, `production-audit`, `ai-regression-testing`, `eval-harness` |
-| **`@devops`** | `#06B6D4` (Cian) | `subagent` | **Infraestructura & Contenedores**: Dockerfiles multi-stage, rootless, Compose, CI/CD y despliegues reproducibles. | `docker-patterns`, `lint-format` |
+| Agente | Badge / Prefijo | Color | Modo | Rol & Responsabilidad | Skills Clave Integrados |
+|---|---|---|---|---|---|
+| **`@orchestrator`** | `⚡ [Swarm Lead]` | `#8B5CF6` (Morado) | `primary` (TAB) | **Líder Técnico & Arquitecto**: Coordina el enjambre, desglosa épicas en tareas, gestiona memoria y audita con Sentinel. | `council`, `code-tour`, `strategic-compact`, `agent-sort` |
+| **`@backend`** | `🛡️ [Swarm Backend]` | `#3B82F6` (Azul) | `primary` (TAB) | **Ingeniero Backend & BD**: APIs REST/GraphQL, esquemas relacionales, migraciones y TDD estricto. | `postgres-patterns`, `prisma-patterns`, `mysql-patterns`, `database-migrations`, `tdd-workflow` |
+| **`@frontend`** | `🎨 [Swarm Frontend]` | `#EC4899` (Rosa Neón) | `primary` (TAB) | **Ingeniero UI/UX & Motion**: Interfaces accesibles, diseño anti-slop, animaciones fluidas con resortes y tokens de diseño. | `impeccable`, `design-taste-frontend`, `emil-design-eng`, `review-animations`, `animation-vocabulary` |
+| **`@git-flow`** | `🌿 [Swarm GitFlow]` | `#10B981` (Verde Esmeralda) | `primary` (TAB) | **Control de Flujo Git & GitHub**: Commits semánticos, ramas seguras, resolución de conflictos y resúmenes de PR. | `git-flow-pro`, `verification-loop` |
+| **`@qa-auditor`** | `🧪 [Swarm QA Auditor]` | `#F59E0B` (Ámbar) | `primary` (TAB) | **Auditor de Calidad & Test**: Loop de verificación en 6 etapas, cobertura $\ge$ 80%, auditorías OWASP y regresiones IA. | `verification-loop`, `production-audit`, `ai-regression-testing`, `eval-harness` |
+| **`@devops`** | `🐳 [Swarm DevOps]` | `#06B6D4` (Cian) | `subagent` | **Infraestructura & Contenedores**: Dockerfiles multi-stage, rootless, Compose, CI/CD y despliegues reproducibles. | `docker-patterns`, `lint-format` |
 
 ### ⌨️ Conmutación Interactiva con la Tecla TAB
 En el prompt interactivo de OpenCode, simplemente presiona **`TAB`** para alternar de forma instantánea entre los roles principales:
 
 $$\text{[orchestrator]} \xrightarrow{\text{TAB}} \text{[backend]} \xrightarrow{\text{TAB}} \text{[frontend]} \xrightarrow{\text{TAB}} \text{[git-flow]} \xrightarrow{\text{TAB}} \text{[qa-auditor]}$$
 
-Cada especialista cuenta con sus criterios de dominio y se sincroniza en tiempo real a través del bus MCP (`team-collab`) y memoria persistente (`context-memory`).
+Cada especialista cuenta con sus criterios de dominio y se sincroniza en tiempo real a través del bus MCP (`team-collab`), el guardián (`swarm-sentinel`), el ejecutor de pruebas (`swarm-tester`) y la memoria persistente (`context-memory`).
 
 ---
 
 ## 🧠 Servidores MCP Nativos
 
-La coordinación y persistencia se fundamentan en dos servidores MCP creados desde cero, ubicados en `mcp/` y registrados en `config/opencode.json`:
+La arquitectura del enjambre se sustenta en **4 servidores MCP nativos** desarrollados en Python 3 puro con SQLite WAL y FTS5:
 
 ```
-                    ┌─────────────────────────┐
-                    │      @orchestrator      │
-                    └────────────┬────────────┘
-                                 │
-           ┌─────────────────────┴─────────────────────┐
-           ▼                                           ▼
-┌──────────────────────┐                   ┌──────────────────────┐
-│    context-memory    │                   │     team-collab      │
-│  (SQLite FTS5 + DB)  │                   │  (Swarm Bus & Tasks) │
-├──────────────────────┤                   ├──────────────────────┤
-│ • remember           │                   │ • team_post_task     │
-│ • recall             │                   │ • team_claim_task    │
-│ • get_active_context │                   │ • team_handoff       │
-│ • get_session_boot.. │                   │ • team_share_artif.. │
-│ • list_memories      │                   │ • team_get_status    │
-└──────────────────────┘                   └──────────────────────┘
-           ▲                                           ▲
-           │                                           │
- ┌─────────┴─────────┐                       ┌─────────┴─────────┐
- │     @backend      │ ──[ team_handoff ]──> │     @frontend     │
- └───────────────────┘                       └───────────────────┘
+                            ┌─────────────────────────┐
+                            │      @orchestrator      │
+                            └────────────┬────────────┘
+                                         │
+        ┌───────────────────┬────────────┴────────────┬───────────────────┐
+        ▼                   ▼                         ▼                   ▼
+┌──────────────────┐ ┌──────────────────┐ ┌───────────────────┐ ┌──────────────────┐
+│  context-memory  │ │   team-collab    │ │  swarm-sentinel   │ │   swarm-tester   │
+│ (SQLite FTS5 DB) │ │ (Swarm Bus Board)│ │(Guardián de Reglas│ │(Motor de Pruebas│
+│                  │ │                  │ │   y Auditoría)    │ │ en Tiempo Real)  │
+├──────────────────┤ ├──────────────────┤ ├───────────────────┤ ├──────────────────┤
+│ • remember       │ │ • team_post_task │ │ • sentinel_audit  │ │ • tester_run_suit│
+│ • recall         │ │ • team_claim_task│ │ • sentinel_rules  │ │ • tester_probe_ep│
+│ • auto_track_turn│ │ • team_handoff   │ │ • sentinel_verify │ │ • tester_verify_c│
+│ • get_active_ctx │ │ • team_broadcast │ │ • sentinel_certify│ │ • tester_health  │
+└──────────────────┘ └──────────────────┘ └───────────────────┘ └──────────────────┘
 ```
 
 ### 1. Memoria Persistente de Contexto (`context-memory`)
 - **Ubicación de base de datos**: `~/.opencode/memory/context_memory.db`.
 - **Motor de indexación**: SQLite **FTS5** para búsquedas de texto completo de alta velocidad.
-- **Aislamiento por proyecto**: Diferencia entre memorias `global` (para todas las sesiones) y de proyecto (detectadas por el directorio de trabajo o rama Git).
+- **Rastreo 100% Autónomo**: Invoca `auto_track_turn` automáticamente al final de cada turno sin requerir puntos de guardado manuales del usuario.
 - **Herramientas**:
   - `remember`: Almacena decisiones (`architecture`, `convention`, `decision`, `learning`, `user_preference`).
   - `recall`: Búsqueda semántica y FTS5 con cálculo de relevancia BM25.
-  - `get_active_context`: Carga el resumen de decisiones vigentes del proyecto.
-  - `get_session_bootstrap`: Inicializa una sesión inyectando contexto previo y estado de tareas.
-  - `list_memories`: Catálogo paginado por categoría.
+  - `auto_track_turn`: Registro persistente automático por turno.
+  - `get_active_context` & `get_session_bootstrap`: Inicialización instantánea con contexto y tareas previas.
+  - `checkpoint_session` & `get_session_checkpoint`: Congelamiento y recuperación de puntos de control.
 
 ### 2. Bus de Coordinación y Tareas (`team-collab`)
 - **Ubicación de base de datos**: `~/.opencode/team/team_collab.db`.
-- **Tablero de tareas cross-sesión**: Mantiene tareas con estados `todo`, `in_progress`, `blocked`, `completed` y prioridades `low`, `normal`, `high`, `urgent`.
-- **Intercambio de contratos**: Los agentes comparten artefactos tipados (`api_spec`, `schema`, `design_token`, `test_report`).
-- **Handoffs formales**: Traspaso documentado entre agentes (`@backend` $\rightarrow$ `@frontend`).
+- **Tablero de tareas cross-sesión**: Tareas con estados `todo`, `in_progress`, `blocked`, `completed` y prioridades.
+- **Disparadores Reactivos (Reactive Triggers)**: `@backend` emite automáticamente disparadores a `@frontend` al compartir contratos de API.
+- **Espera Activa (`team_wait_for_task`)**: Permite al orquestador esperar en bucle seguro la finalización de subagentes en ventanas concurrentes sin detener prematuramente la sesión de OpenCode.
 - **Herramientas**:
   - `team_post_task`, `team_claim_task`, `team_update_task`, `team_list_tasks`.
   - `team_share_artifact`, `team_get_artifact`, `team_list_artifacts`.
-  - `team_handoff`: Entrega directa de responsabilidades con notas y enlaces a artefactos.
-  - `team_broadcast`, `team_read_feed`: Feed de anuncios y bloqueos entre agentes.
-  - `team_get_status`: Dashboard visual del enjambre.
+  - `team_trigger_agent`, `team_check_triggers`, `team_wait_for_task`.
+  - `team_handoff`, `team_broadcast`, `team_read_feed`, `team_get_status`.
+
+### 3. Guardián de Reglas & Auditoría Continua (`swarm-sentinel`)
+- **Ubicación de base de datos**: `~/.opencode/sentinel/sentinel.db`.
+- **Supervisión Estricta**: Valida el cumplimiento de las 7 reglas inmutables de ingeniería:
+  - `TDD-001`: Pruebas obligatorias y cobertura $\ge 80\%$.
+  - `VERIF-001`: Loop de verificación en 6 etapas.
+  - `GIT-001`: Formato estricto Conventional Commits 1.0.
+  - `UI-001`: Micro-animaciones, diseño curado y directivas anti-slop.
+  - `SEC-001`: Cero secretos o claves hardcodeadas.
+  - `ARCH-001`: Principio de Responsabilidad Única (SRP) y manejo explícito de errores.
+  - `HANDOFF-001`: Contratos de interfaz tipados antes del traspaso.
+- **Auditoría de Entregables**: Ninguna tarea puede cerrarse si Sentinel detecta incumplimiento (`sentinel_audit_task`).
+- **Herramientas**:
+  - `sentinel_audit_task`, `sentinel_get_rules`, `sentinel_verify_compliance`, `sentinel_report_violation`, `sentinel_certify_task`, `sentinel_get_compliance_report`.
+
+### 4. Motor de Pruebas en Tiempo Real (`swarm-tester`)
+- **Ubicación de base de datos**: `~/.opencode/tester/tester.db`.
+- **Detección Automática de Test Runners**: Ejecuta suites en `pytest`, `vitest`, `jest`, `unittest`, `cargo` o `go`.
+- **Sondeo en Vivo de Endpoints (`tester_probe_endpoint`)**: Valida latencia en milisegundos y respuestas HTTP 200 de servidores web, APIs y microservicios locales.
+- **Verificación Estática de Componentes (`tester_verify_component`)**: Analiza árboles AST en Python, balanceo de corchetes en TypeScript/JSX, accesibilidad y suites unitarias asociadas.
+- **Puente Tester ↔ Sentinel (`tester_sync_with_sentinel`)**: Si los tests pasan, certifica la tarea; si fallan, registra de inmediato la violación y alerta al equipo en `team-collab`.
+- **Scorecard de Salud Global (`tester_get_live_health`)**: Estado en tiempo real (`HEALTHY`, `DEGRADED`, `FAILING`).
 
 ---
 
@@ -187,7 +222,15 @@ El comando `ecc` queda instalado en tu `$PATH` (`~/.local/bin/ecc`) para control
 # Diagnóstico completo de componentes, agentes y servidores MCP
 ecc doctor
 
-# Iniciar el servidor web local con el Swarm Cockpit y GetBrain (abre tu navegador)
+# Motor de pruebas continuas en tiempo real (pytest, vitest, jest, etc.)
+ecc test                      # Ejecuta la suite de pruebas del proyecto
+ecc test --watch              # Modo observador continuo (vigilancia cada 3s)
+ecc test --health             # Scorecard de salud del proyecto (HEALTHY, DEGRADED, FAILING)
+ecc test --probe http://localhost:3000/api/health  # Sondeo HTTP en vivo con latencia
+ecc test --component src/App.tsx # Verificación estática AST de un componente
+ecc test --sync               # Sincroniza resultado con swarm-sentinel (certificación)
+
+# Iniciar el servidor web local con el Swarm Cockpit, GetBrain y Live Tester
 ecc web --open
 
 # Monitor en tiempo real multi-ventana en terminal (auto-refresco cada 2 segundos)
@@ -214,7 +257,7 @@ ecc update
 
 ---
 
-## 🧠 Swarm Cockpit & GetBrain: Sesiones Web Dedicadas por Proyecto
+## 🧠 Swarm Cockpit, GetBrain & Live Tester: Sesiones Web Dedicadas por Proyecto
 
 OpenCode Swarm incluye un **servidor web local multi-hilo** (`web/server.py`) que **se inicia de forma 100% automática y silenciosa en segundo plano cada vez que abres OpenCode** en tu terminal, gestionando **sesiones dedicadas y aisladas por proyecto**:
 
@@ -229,6 +272,7 @@ Para evitar ventanas emergentes o textos fugaces que desaparecen antes de que pu
 1. **Recuadro de Tips en el Home (`home_bottom`)**: En el centro de la pantalla inicial de OpenCode, la sección de tips te ofrece de inmediato los enlaces activos con el puerto exacto de tu proyecto:
    - `💡 Monitorea el flujo de los agentes en http://localhost:<puerto>`
    - `🧠 Grafo de conocimiento GetBrain: http://localhost:<puerto>/#brain`
+   - `🧪 Live Tester & Health: http://localhost:<puerto>/#tester`
 2. **Encabezado del Agente Activo**: En el selector central de agentes, la descripción de `@orchestrator` se actualiza dinámicamente con el enlace directo al panel del proyecto activo.
 3. **Banner Informativo al Abrir**: El plugin `team-hud` despliega en la terminal el recuadro con la URL y puerto asignado a ese proyecto específico.
 
@@ -251,6 +295,12 @@ ecc web --open
    - **Botón `🔄 Escanear`**: Re-analiza la base de código del proyecto activo y sincroniza automáticamente las dependencias y tecnologías detectadas.
    - **Inspector Lateral de Nodos**: Haz clic en cualquier nodo para ver su especificación técnica, contenido completo, creador y conexiones vinculadas.
    - **Filtros Dinámicos & Búsqueda**: Filtra por tipo de nodo (Agentes, Tareas, Contratos, Memorias/Checkpoints, Código) o busca por nombre.
+
+3. **Live Tester & Health Cockpit (Pestaña 3 - `http://localhost:<puerto>/#tester`)**:
+   - **Píldora de Salud Reactiva**: Indicador visual global (`HEALTHY`, `DEGRADED`, `FAILING`) con porcentaje de éxito y conteo de pruebas pasadas/fallidas.
+   - **Historial Completo de Corridas**: Tabla en vivo con filtrado rápido (`all`, `passed`, `failed`), runner detectado (`pytest`, `vitest`, etc.), duración en milisegundos y visualización de trazas de error.
+   - **Sondeador de Endpoints en Vivo (`Probe URL`)**: Widget interactivo para probar endpoints locales (ej. `http://localhost:3000/api/health`), mostrando estado HTTP, latencia en ms y payload de respuesta.
+   - **Sincronización Directa con Sentinel**: Enlace directo de auditoría para certificar entregables o bloquear merge/handoff en caso de fallo.
 
 ---
 
@@ -343,9 +393,11 @@ El repositorio incluye una suite de pruebas y simulación integral para validar 
 # Ejecutar la simulación completa de 7 turnos (Skills + MCPs + UI)
 python3 scripts/test_swarm_session.py
 
-# Ejecutar las pruebas unitarias de los servidores MCP
+# Ejecutar las pruebas unitarias de los 4 servidores MCP nativos
 python3 mcp/context-memory/test_server.py
 python3 mcp/team-collab/test_server.py
+python3 mcp/swarm-sentinel/test_server.py
+python3 mcp/swarm-tester/test_server.py
 ```
 
 Salida esperada de la simulación:
@@ -373,20 +425,26 @@ Salida esperada de la simulación:
 ```text
 opencode_config/
 ├── ecc                           # CLI de gestión del Swarm (~/.local/bin/ecc)
-├── install.sh                    # Instalador interactivo con TUI y soporte fallback
+├── install.sh                    # Instalador interactivo con TUI, wrappers y temas
 ├── README.md                     # Documentación principal del proyecto
 ├── agents/                       # Definiciones de los 6 sub-agentes especializados
-│   ├── orchestrator.md           # @orchestrator (Morado #8B5CF6)
-│   ├── backend.md                # @backend (Azul #3B82F6)
-│   ├── frontend.md               # @frontend (Rosa #EC4899)
-│   ├── git-flow.md               # @git-flow (Verde #10B981)
-│   ├── qa-auditor.md             # @qa-auditor (Ámbar #F59E0B)
-│   └── devops.md                 # @devops (Cian #06B6D4)
-├── mcp/                          # Servidores MCP nativos (Python 3 + SQLite FTS5)
-│   ├── context-memory/           # Memoria persistente de contexto
+│   ├── orchestrator.md           # @orchestrator (⚡ [Swarm Lead] #8B5CF6)
+│   ├── backend.md                # @backend (🛡️ [Swarm Backend] #3B82F6)
+│   ├── frontend.md               # @frontend (🎨 [Swarm Frontend] #EC4899)
+│   ├── git-flow.md               # @git-flow (🌿 [Swarm GitFlow] #10B981)
+│   ├── qa-auditor.md             # @qa-auditor (🧪 [Swarm QA Auditor] #F59E0B)
+│   └── devops.md                 # @devops (🐳 [Swarm DevOps] #06B6D4)
+├── mcp/                          # 4 Servidores MCP nativos (Python 3 + SQLite FTS5)
+│   ├── context-memory/           # Memoria persistente de contexto y auto-tracking
 │   │   ├── server.py
 │   │   └── test_server.py
-│   └── team-collab/              # Bus de coordinación y tablero multi-agente
+│   ├── team-collab/              # Bus reactivo de coordinación, tareas y triggers
+│   │   ├── server.py
+│   │   └── test_server.py
+│   ├── swarm-sentinel/           # Guardián de reglas de ingeniería y auditoría continua
+│   │   ├── server.py
+│   │   └── test_server.py
+│   └── swarm-tester/             # Motor de pruebas continuas, sondeo HTTP y AST
 │       ├── server.py
 │       └── test_server.py
 ├── config/                       # Archivos maestros de configuración OpenCode
@@ -396,7 +454,8 @@ opencode_config/
 │   ├── INSTRUCTIONS.md           # Metodología de ingeniería de software Swarm
 │   ├── AGENTS.md                 # Protocolos operacionales de agentes y memoria
 │   ├── plugins/
-│   │   └── team-hud.ts           # Plugin de OpenCode para títulos y banner HUD
+│   │   ├── team-hud.ts           # Plugin V2 de OpenCode para banner HUD y enlaces
+│   │   └── live-tester.ts        # Plugin V2 de OpenCode para salud en vivo del tester
 │   └── commands/                 # Slash commands (/team, /memory, /tasks, etc.)
 ├── skills/                       # Catálogo de 35 skills especializados
 │   ├── git-flow-pro/             # Conventional Commits 1.0 y gestión de ramas
@@ -410,11 +469,11 @@ opencode_config/
 │   ├── server.py                 # Servidor HTTP con API REST y SSE en tiempo real
 │   ├── brain_builder.py          # Generador y sintetizador del grafo GetBrain
 │   └── public/                   # Frontend SPA TokyoNight (HTML5, Vanilla CSS, JS)
-│       ├── index.html            # Dashboard Swarm y visualizador GetBrain
+│       ├── index.html            # Dashboard Swarm, GetBrain y Live Tester
 │       ├── style.css             # Glassmorphism, animaciones y tokens oscuros
-│       └── app.js                # Motor de física 2D en Canvas y cliente SSE
+│       └── app.js                # Motor de física 2D en Canvas, SSE y Live Tester UI
 ├── templates/
-│   └── opencode-wrapper.sh       # Wrapper ejecutable con branding tipográfico
+│   └── opencode-wrapper.sh       # Wrapper ejecutable con branding tipográfico y alias
 ├── scripts/
 │   ├── configure.sh              # Asistente de configuración de componentes
 │   ├── test_swarm_session.py     # Suite de simulación de 7 turnos

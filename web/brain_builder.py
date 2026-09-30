@@ -514,6 +514,6 @@ def build_project_brain(project_name="default", workspace_dir=None):
 
 if __name__ == "__main__":
     import json
-    data = build_project_brain("container", "/home/omicron/Documentos/container")
-    print(f"Synthesized GetBrain for container: {data['stats']['total_nodes']} nodes, {data['stats']['total_links']} links.")
+    data = build_project_brain(Path.cwd().name, str(Path.cwd()))
+    print(f"Synthesized GetBrain for {Path.cwd().name}: {data['stats']['total_nodes']} nodes, {data['stats']['total_links']} links.")
     print("Nodes summary:", json.dumps(data["stats"], indent=2))

@@ -19,9 +19,10 @@ msgbox "Welcome" \
 This installer will set up:
 
   • 6 Specialized Sub-Agents (@orchestrator, @backend, @frontend, @git-flow, @qa-auditor, @devops)
-  • 2 Native MCP Servers:
+  • 3 Native MCP Servers:
       - context-memory (Persistent context with SQLite FTS5)
       - team-collab (Inter-agent communication & task board)
+      - swarm-sentinel (Engineering rules guardian & automated task auditor)
   • 34 ECC skills for engineering, testing, DB, design, infra
   • Engineering methodology & Swarm Lifecycle (INSTRUCTIONS.md)
   • Multi-agent rules & memory protocols (AGENTS.md)
@@ -186,10 +187,15 @@ if echo "$CHOICES" | grep -q "CONFIG"; then
   log "Core configuration installed to $CONFIG_DIR"
 fi
 
-# 2. Install TUI Theme
-if echo "$CHOICES" | grep -q "TUI" && [ -f "$REPO_DIR/config/tui.json" ]; then
+# 2. Install TUI Theme & CLI Preferences
+if echo "$CHOICES" | grep -q "TUI"; then
   do_step "Installing aesthetic TUI configuration..."
-  cp "$REPO_DIR/config/tui.json" "$CONFIG_DIR/tui.json"
+  if [ -f "$REPO_DIR/config/tui.json" ]; then
+    cp "$REPO_DIR/config/tui.json" "$CONFIG_DIR/tui.json"
+  fi
+  if [ -f "$CONFIG_DIR/cli.json" ]; then
+    python3 -c "import json; p='$CONFIG_DIR/cli.json'; d=json.load(open(p)); d['theme']={'name':'tokyonight','mode':'dark'}; json.dump(d,open(p,'w'),indent=2)" 2>/dev/null || true
+  fi
   log "TUI configuration (tokyonight) installed"
 fi
 
@@ -206,9 +212,20 @@ if echo "$CHOICES" | grep -q "MCP" && [ -d "$REPO_DIR/mcp" ]; then
   do_step "Installing native MCP servers..."
   mkdir -p "$CONFIG_DIR/mcp/context-memory"
   mkdir -p "$CONFIG_DIR/mcp/team-collab"
+  mkdir -p "$CONFIG_DIR/mcp/swarm-sentinel"
+  mkdir -p "$CONFIG_DIR/mcp/swarm-tester"
   cp -r "$REPO_DIR/mcp/context-memory/"* "$CONFIG_DIR/mcp/context-memory/"
   cp -r "$REPO_DIR/mcp/team-collab/"* "$CONFIG_DIR/mcp/team-collab/"
-  chmod +x "$CONFIG_DIR/mcp/context-memory/server.py" "$CONFIG_DIR/mcp/team-collab/server.py"
+  cp -r "$REPO_DIR/mcp/swarm-sentinel/"* "$CONFIG_DIR/mcp/swarm-sentinel/"
+  cp -r "$REPO_DIR/mcp/swarm-tester/"* "$CONFIG_DIR/mcp/swarm-tester/"
+  chmod +x "$CONFIG_DIR/mcp/context-memory/server.py" "$CONFIG_DIR/mcp/team-collab/server.py" "$CONFIG_DIR/mcp/swarm-sentinel/server.py" "$CONFIG_DIR/mcp/swarm-tester/server.py"
+
+  # Also copy to swarm/mcp if present
+  if [ -d "$CONFIG_DIR/swarm/mcp" ]; then
+    mkdir -p "$CONFIG_DIR/swarm/mcp/swarm-tester"
+    cp -r "$REPO_DIR/mcp/swarm-tester/"* "$CONFIG_DIR/swarm/mcp/swarm-tester/"
+    chmod +x "$CONFIG_DIR/swarm/mcp/swarm-tester/server.py"
+  fi
 
   # Create executable wrappers in ~/.local/bin
   cat > "$LOCAL_BIN/opencode-context-memory" <<EOF
@@ -223,7 +240,19 @@ exec python3 "$CONFIG_DIR/mcp/team-collab/server.py" "\$@"
 EOF
   chmod +x "$LOCAL_BIN/opencode-team-collab"
 
-  log "Native MCP servers installed (context-memory & team-collab)"
+  cat > "$LOCAL_BIN/opencode-swarm-sentinel" <<EOF
+#!/usr/bin/env bash
+exec python3 "$CONFIG_DIR/mcp/swarm-sentinel/server.py" "\$@"
+EOF
+  chmod +x "$LOCAL_BIN/opencode-swarm-sentinel"
+
+  cat > "$LOCAL_BIN/opencode-swarm-tester" <<EOF
+#!/usr/bin/env bash
+exec python3 "$CONFIG_DIR/mcp/swarm-tester/server.py" "\$@"
+EOF
+  chmod +x "$LOCAL_BIN/opencode-swarm-tester"
+
+  log "Native MCP servers installed (context-memory, team-collab, swarm-sentinel, swarm-tester)"
 fi
 
 # 5. Install Skills
@@ -301,8 +330,9 @@ fi
 # Install OpenCode Swarm launcher wrapper
 if [ -f "$REPO_DIR/templates/opencode-wrapper.sh" ]; then
   cp "$REPO_DIR/templates/opencode-wrapper.sh" "$LOCAL_BIN/opencode"
-  chmod +x "$LOCAL_BIN/opencode"
-  log "OpenCode Swarm launcher installed to $LOCAL_BIN/opencode"
+  cp "$REPO_DIR/templates/opencode-wrapper.sh" "$LOCAL_BIN/opencode-swarm"
+  chmod +x "$LOCAL_BIN/opencode" "$LOCAL_BIN/opencode-swarm"
+  log "OpenCode Swarm launcher installed to $LOCAL_BIN/opencode (alias: opencode-swarm)"
 fi
 
 # ──────────────── STEP: Post-install ────────────────
@@ -349,6 +379,8 @@ echo ""
 echo -e "  ${C_BOLD}MCP Servers:${C_NC}"
 echo -e "    ${C_GREEN}✓${C_NC} context-memory (SQLite FTS5 persistent memory)"
 echo -e "    ${C_GREEN}✓${C_NC} team-collab    (Inter-agent Swarm Bus & task board)"
+echo -e "    ${C_GREEN}✓${C_NC} swarm-sentinel (Autonomous Rules Guardian & Auditor)"
+echo -e "    ${C_GREEN}✓${C_NC} swarm-tester   (Real-Time Continuous Testing & Probes)"
 echo ""
 echo -e "  ${C_BOLD}Available Commands in OpenCode:${C_NC}"
 echo -e "    ${C_GREEN}/team${C_NC}      — View team status and task board"

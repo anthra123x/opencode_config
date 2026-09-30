@@ -42,6 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check URL hash for direct tab navigation
   if (window.location.hash === '#brain') {
     switchView('brain');
+  } else if (window.location.hash === '#tester') {
+    switchView('tester');
   }
 });
 
@@ -71,6 +73,13 @@ function switchView(viewName) {
       }
     });
     fetchBrainGraph();
+  } else if (viewName === 'tester') {
+    const panel = document.getElementById('viewTester');
+    const tab = document.getElementById('tabTester');
+    if (panel) panel.classList.add('active');
+    if (tab) tab.classList.add('active');
+    try { history.replaceState(null, null, '#tester'); } catch (e) {}
+    fetchTesterData();
   }
 }
 
@@ -133,14 +142,26 @@ function initSSE() {
   }
 }
 
+async function safeFetchJson(url, fallback = {}) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return fallback;
+    return await res.json();
+  } catch (e) {
+    return fallback;
+  }
+}
+
 async function fetchInitialData() {
   try {
-    const [resStatus, resTasks, resArtifacts, resMemories, resFeed] = await Promise.all([
-      fetch('/api/status').then(r => r.json()),
-      fetch('/api/tasks').then(r => r.json()),
-      fetch('/api/artifacts').then(r => r.json()),
-      fetch('/api/memories').then(r => r.json()),
-      fetch('/api/feed').then(r => r.json())
+    const [resStatus, resTasks, resArtifacts, resMemories, resFeed, resSentinel, resTester] = await Promise.all([
+      safeFetchJson('/api/status', { project: 'default', agents: [] }),
+      safeFetchJson('/api/tasks', { tasks: [] }),
+      safeFetchJson('/api/artifacts', { artifacts: [] }),
+      safeFetchJson('/api/memories', { memories: [] }),
+      safeFetchJson('/api/feed', { feed: [] }),
+      safeFetchJson('/api/sentinel', { status: 'COMPLIANT', score: 100 }),
+      safeFetchJson('/api/tester', { health: 'MONITORING', runs: [], probes: [], components: [] })
     ]);
 
     updateSwarmUI({
@@ -148,16 +169,211 @@ async function fetchInitialData() {
       project_dir: resStatus.project_dir,
       branch: resStatus.branch,
       clock: resStatus.clock,
-      agents: resStatus.agents,
-      tasks: resTasks.tasks,
-      messages: resFeed.feed
+      agents: resStatus.agents || [],
+      tasks: resTasks.tasks || [],
+      messages: resFeed.feed || []
     });
 
     renderArtifacts(resArtifacts.artifacts || []);
     renderMemories(resMemories.memories || []);
+    updateSentinelUI(resSentinel);
+    updateTesterUI(resTester);
     fetchBrainGraph();
   } catch (err) {
     console.error('Error fetching initial data:', err);
+  }
+}
+
+function updateSentinelUI(sentinel) {
+  const textEl = document.getElementById('sentinelStatusText');
+  const pillEl = document.getElementById('sentinelPill');
+  if (!textEl || !sentinel) return;
+
+  const score = sentinel.score !== undefined ? sentinel.score : 100;
+  const status = sentinel.status || (score >= 80 ? 'COMPLIANT' : 'NON-COMPLIANT');
+
+  textEl.textContent = `SENTINEL: ${status} (${score}%)`;
+  if (pillEl) {
+    if (status === 'COMPLIANT') {
+      pillEl.style.background = 'rgba(16, 185, 129, 0.15)';
+      pillEl.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+      pillEl.style.color = '#34d399';
+    } else {
+      pillEl.style.background = 'rgba(239, 68, 68, 0.15)';
+      pillEl.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+      pillEl.style.color = '#f87171';
+    }
+  }
+}
+
+async function fetchTesterData() {
+  const data = await safeFetchJson('/api/tester', { health: 'MONITORING', runs: [], probes: [], components: [] });
+  updateTesterUI(data);
+}
+
+function updateTesterUI(tester) {
+  if (!tester) return;
+  const pillEl = document.getElementById('testerPill');
+  const textEl = document.getElementById('testerStatusText');
+  const badgeEl = document.getElementById('testerHealthBadge');
+  const countEl = document.getElementById('testPassCount');
+  const runsCountEl = document.getElementById('testRunsCount');
+
+  const health = tester.health || 'MONITORING';
+  if (textEl) textEl.textContent = `TESTER: ${health}`;
+  if (badgeEl) {
+    badgeEl.textContent = health;
+    if (health === 'HEALTHY') {
+      badgeEl.style.background = 'rgba(16, 185, 129, 0.2)';
+      badgeEl.style.color = '#34d399';
+      badgeEl.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+    } else if (health === 'DEGRADED') {
+      badgeEl.style.background = 'rgba(245, 158, 11, 0.2)';
+      badgeEl.style.color = '#fbbf24';
+      badgeEl.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+    } else {
+      badgeEl.style.background = 'rgba(239, 68, 68, 0.2)';
+      badgeEl.style.color = '#f87171';
+      badgeEl.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+    }
+  }
+
+  const runs = tester.runs || [];
+  const latestRun = runs[0];
+  const passed = latestRun ? latestRun.passed : 0;
+  if (countEl) countEl.textContent = passed;
+  if (runsCountEl) runsCountEl.textContent = runs.length;
+
+  // Render runs
+  const runsList = document.getElementById('testRunsList');
+  if (runsList) {
+    if (runs.length === 0) {
+      runsList.innerHTML = '<div class="empty-state">No hay ejecuciones de pruebas registradas todavía.</div>';
+    } else {
+      runsList.innerHTML = runs.map(r => {
+        const isPass = r.status === 'PASS';
+        const color = isPass ? '#34d399' : '#f87171';
+        const bg = isPass ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+        const border = isPass ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+        return `
+          <div style="background: ${bg}; border: 1px solid ${border}; border-radius: 8px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 700; color: ${color}; font-size: 13px;">[${r.status}]</span>
+                <span style="font-size: 13px; font-weight: 600; color: #f8fafc;">${escapeHtml(r.runner || 'runner')}</span>
+                ${r.target_path ? `<span style="font-size: 11px; color: #94a3b8; font-family: monospace;">${escapeHtml(r.target_path)}</span>` : ''}
+              </div>
+              <span style="font-size: 11px; color: #94a3b8;">${escapeHtml(r.duration_ms || 0)}ms</span>
+            </div>
+            <div style="display: flex; gap: 14px; font-size: 12px; color: #cbd5e1; margin-bottom: 6px;">
+              <span>✅ ${r.passed || 0} pasados</span>
+              <span>❌ ${r.failed || 0} fallados</span>
+              <span>⏭️ ${r.skipped || 0} omitidos</span>
+              ${r.coverage_percent > 0 ? `<span style="font-weight: 600; color: #60a5fa;">📊 Cobertura: ${r.coverage_percent}%</span>` : ''}
+            </div>
+            <details style="font-size: 11px; color: #94a3b8; cursor: pointer;">
+              <summary>Ver salida de consola</summary>
+              <pre style="margin-top: 6px; padding: 8px; background: rgba(15, 23, 42, 0.8); border-radius: 6px; overflow-x: auto; color: #e2e8f0; font-family: monospace; font-size: 11px; max-height: 160px;">${escapeHtml(r.output || 'Sin salida')}</pre>
+            </details>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // Render probes
+  const probesList = document.getElementById('endpointProbesList');
+  if (probesList) {
+    const probes = tester.probes || [];
+    if (probes.length === 0) {
+      probesList.innerHTML = '<div class="empty-state">Sin sondeos recientes.</div>';
+    } else {
+      probesList.innerHTML = probes.map(p => {
+        const isPass = p.status === 'PASS';
+        const color = isPass ? '#34d399' : '#f87171';
+        return `
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; padding: 8px 10px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              <span style="font-weight: 700; color: #60a5fa;">${escapeHtml(p.method || 'GET')}</span>
+              <span style="color: #cbd5e1; font-family: monospace; font-size: 11px;">${escapeHtml(p.url)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 11px; color: #94a3b8;">${p.latency_ms || 0}ms</span>
+              <span style="font-weight: 600; color: ${color}; font-size: 11px;">${p.actual_status || 'ERR'}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // Render component checks
+  const compsList = document.getElementById('componentChecksList');
+  if (compsList) {
+    const comps = tester.components || [];
+    if (comps.length === 0) {
+      compsList.innerHTML = '<div class="empty-state">Sin verificaciones de componentes registradas.</div>';
+    } else {
+      compsList.innerHTML = comps.map(c => {
+        const isPass = c.status === 'PASS';
+        const isWarn = c.status === 'WARN';
+        const color = isPass ? '#34d399' : (isWarn ? '#fbbf24' : '#f87171');
+        return `
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; padding: 8px 10px; font-size: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-weight: 600; color: #f8fafc; font-family: monospace; font-size: 11px;">${escapeHtml(c.file_path)}</span>
+              <span style="font-weight: 700; color: ${color}; font-size: 11px;">[${c.status}]</span>
+            </div>
+            <div style="font-size: 11px; color: #94a3b8; white-space: pre-wrap; font-family: monospace;">${escapeHtml(c.details || '')}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+}
+
+async function triggerRunTests() {
+  const btn = document.getElementById('btnRunTests');
+  const input = document.getElementById('testPathInput');
+  const path = input ? input.value.trim() : '';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span><span>Ejecutando...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/tester/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+    await res.json();
+    await fetchTesterData();
+  } catch (e) {
+    console.error('Error running tests:', e);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>▶</span><span>Ejecutar Tests Ahora</span>';
+    }
+  }
+}
+
+async function triggerProbeEndpoint() {
+  const input = document.getElementById('probeUrlInput');
+  const url = input ? input.value.trim() : '';
+  if (!url) return;
+
+  try {
+    await fetch('/api/tester/probe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, method: 'GET' })
+    });
+    await fetchTesterData();
+  } catch (e) {
+    console.error('Error probing endpoint:', e);
   }
 }
 

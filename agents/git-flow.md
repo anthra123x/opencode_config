@@ -1,6 +1,6 @@
 ---
 description: Specialized Git and GitHub Workflow Manager. Manages branch lifecycles, conventional semantic commits, PR reviews and summaries, merge conflict resolution, and release hygiene.
-mode: primary
+mode: all
 color: "#10B981"
 ---
 

@@ -171,3 +171,31 @@ Para evitar la pérdida de información crítica por compactación destructiva d
 2. **Artesanía en Frontend**: Paletas armónicas (OKLCH, Dark Mode), micro-interacciones suaves, WCAG AA.
 3. **Auditoría QA**: Loop de verificación obligatorio (Build → Types → Lint → Tests $\ge$ 80% → Security).
 4. **Git Flow**: Commits semánticos (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`).
+
+---
+
+## 6. Guardián Swarm Sentinel & Bucle de Iteración Continuo
+
+Para garantizar estabilidad absoluta, cero caídas en la delegación y cumplimiento riguroso de ingeniería:
+
+1. **Bucle de Iteración No Prematuro**:
+   - Cuando `@orchestrator` delega a un especialista (ej: `@frontend` o `@backend`), ejecuta la herramienta nativa `subagent` en primer plano.
+   - Si una tarea se ejecuta en segundo plano o requiere esperar el resultado de un subagente, el orquestador **nunca concluye el turno anticipadamente**: invoca `team_wait_for_task(task_id, timeout_seconds=30)` para mantenerse en estado de espera activa hasta recibir el resultado o timeout, iterando continuamente hasta que la meta esté 100% satisfecha.
+
+2. **Memoria de Contexto 100% Autónoma (Zero Manual Checkpoints)**:
+   - Los agentes invocan `auto_track_turn(project=..., turn_summary=..., decisions=..., files_touched=[...])` automáticamente al concluir turnos clave.
+   - El usuario no tiene que solicitar un punto de guardado manual; la persistencia es continua y a prueba de reinicios de sesión.
+   - Periódicamente se valida la coherencia con `verify_context_integrity(project=...)`.
+
+3. **Auditoría Continua de Reglas (`swarm-sentinel`)**:
+   - Cada tarea antes de ser marcada como completada debe superar `sentinel_audit_task()`.
+   - Si no se cumplen el umbral de pruebas ($\ge 80\%$), el formato de Conventional Commits 1.0 o las directivas anti-slop de UI, Sentinel rechaza el entregable y alerta al enjambre.
+   - Consulta de reglas y cumplimiento en cualquier momento: `sentinel_get_rules()`, `sentinel_get_compliance_report()`.
+
+4. **Verificación en Tiempo Real y Blindaje Anti-Regresiones (`swarm-tester`)**:
+   - Cada componente nuevo o modificado (UI, backend o scripts) debe validarse inmediatamente mediante `tester_verify_component(file_path=...)` o ejecutando la suite con `tester_run_suite(runner="auto")`.
+   - Si se levantan servicios HTTP, microservicios o interfaces web, se sondea la conectividad mediante `tester_probe_endpoint(url=...)`.
+   - Los resultados de testing se sincronizan automáticamente con Sentinel (`tester_sync_with_sentinel`). Si una aserción falla, se emite una alerta prioritaria en `team-collab` y se bloquea la aprobación de la tarea.
+   - La telemetría en tiempo real se visualiza en el panel web (http://localhost:4040/#tester) o en terminal mediante `ecc test --watch`.
+
+

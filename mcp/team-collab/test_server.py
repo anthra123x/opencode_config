@@ -17,11 +17,14 @@ import server
 class TestTeamCollabServer(unittest.TestCase):
     def setUp(self):
         conn = server.get_db()
-        with conn:
-            conn.execute("DELETE FROM team_messages")
-            conn.execute("DELETE FROM team_agents")
-            conn.execute("DELETE FROM team_tasks")
-            conn.execute("DELETE FROM team_artifacts")
+        try:
+            with conn:
+                conn.execute("DELETE FROM team_messages")
+                conn.execute("DELETE FROM team_agents")
+                conn.execute("DELETE FROM team_tasks")
+                conn.execute("DELETE FROM team_artifacts")
+        finally:
+            conn.close()
 
     def tearDown(self):
         pass
@@ -210,8 +213,12 @@ class TestTeamCollabServer(unittest.TestCase):
             "assigned_to": "qa-auditor",
             "project": "project-audit"
         })
-        cur = server.get_db().execute("SELECT id FROM team_tasks WHERE project = 'project-audit' ORDER BY id DESC LIMIT 1")
-        task_id = cur.fetchone()["id"]
+        conn = server.get_db()
+        try:
+            cur = conn.execute("SELECT id FROM team_tasks WHERE project = 'project-audit' ORDER BY id DESC LIMIT 1")
+            task_id = cur.fetchone()["id"]
+        finally:
+            conn.close()
 
         server.tool_team_claim_task({
             "task_id": task_id,

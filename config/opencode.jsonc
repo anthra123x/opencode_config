@@ -14,32 +14,32 @@
     "orchestrator": {
       "mode": "primary",
       "color": "#8B5CF6",
-      "description": "Team Lead & Orchestrator. Monitoreo en vivo: http://localhost:4040 | GetBrain: http://localhost:4040/#brain"
+      "description": "⚡ [Swarm Lead] Orchestrator & Architect. Monitoreo: http://localhost:4040 | GetBrain: http://localhost:4040/#brain | Live Tester: http://localhost:4040/#tester"
     },
     "backend": {
-      "mode": "primary",
+      "mode": "all",
       "color": "#3B82F6",
-      "description": "Specialized Backend Engineer. Builds APIs, database models (PostgreSQL, Prisma, MySQL), business logic, and TDD unit tests."
+      "description": "🛡️ [Swarm Backend] APIs, DB Models (Postgres/Prisma/MySQL) & TDD Unit Testing (>=80%)."
     },
     "frontend": {
-      "mode": "primary",
+      "mode": "all",
       "color": "#EC4899",
-      "description": "Specialized Frontend & UI/UX Engineer. Builds responsive web interfaces with curated typography, micro-animations, and anti-slop design."
+      "description": "🎨 [Swarm Frontend] Modern UI/UX, Spring Animations, Tokens & Anti-Slop Design."
     },
     "git-flow": {
-      "mode": "primary",
+      "mode": "all",
       "color": "#10B981",
-      "description": "Specialized Git and GitHub Workflow Manager. Manages branch lifecycles, conventional semantic commits, and PR reviews."
+      "description": "🌿 [Swarm GitFlow] Branch Lifecycles, Conventional Commits 1.0 & Clean Releases."
     },
     "qa-auditor": {
-      "mode": "primary",
+      "mode": "all",
       "color": "#F59E0B",
-      "description": "Specialized Quality Assurance & Test Auditor. Audits test suites, ensures coverage >=80%, verifies builds, and detects AI regressions."
+      "description": "🧪 [Swarm QA Auditor] 6-Stage Verification Loop, Live Tester & Sentinel Rule Audits."
     },
     "devops": {
-      "mode": "subagent",
+      "mode": "all",
       "color": "#06B6D4",
-      "description": "Specialized DevOps and Infrastructure Engineer. Crafts lean multi-stage Dockerfiles, Docker Compose setups, and CI/CD pipelines."
+      "description": "🐳 [Swarm DevOps] Multi-Stage Dockerfiles, Rootless Containers & CI/CD Pipelines."
     }
   },
   "permission": {

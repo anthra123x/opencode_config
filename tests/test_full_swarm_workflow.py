@@ -50,7 +50,7 @@ def run_all_tests():
         str(WORKSPACE_DIR / "web" / "server.py"),
         "--ensure",
         "--dir", str(WORKSPACE_DIR),
-        "--project", "opencodeconfig"
+        "--project", WORKSPACE_DIR.name
     ], capture_output=True, text=True, check=True)
     port = int(proc.stdout.strip())
     base_url = f"http://localhost:{port}"

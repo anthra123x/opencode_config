@@ -5,8 +5,48 @@ set -euo pipefail
 # Installed to ~/.local/bin/ecc by install.sh
 
 ECC_CONFIG="${ECC_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
-ECC_SKILLS="${ECC_SKILLS:-$HOME/.opencode/skills}"
+if [ -d "$ECC_CONFIG/skills" ]; then
+  ECC_SKILLS="${ECC_SKILLS:-$ECC_CONFIG/skills}"
+else
+  ECC_SKILLS="${ECC_SKILLS:-$HOME/.opencode/skills}"
+fi
 ECC_ROOT="${ECC_ROOT:-$HOME/.local/share/opencode}"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+find_mcp_server() {
+  local name="$1"
+  local candidates=(
+    "$ECC_CONFIG/mcp/$name/server.py"
+    "$ECC_CONFIG/swarm/mcp/$name/server.py"
+    "$HOME/.config/opencode/swarm/mcp/$name/server.py"
+    "$REPO_DIR/mcp/$name/server.py"
+    "/home/omicron/Documentos/opencode_config/mcp/$name/server.py"
+  )
+  for p in "${candidates[@]}"; do
+    if [ -f "$p" ]; then
+      echo "$p"
+      return 0
+    fi
+  done
+  return 1
+}
+
+find_web_server() {
+  local candidates=(
+    "$ECC_CONFIG/web/server.py"
+    "$ECC_CONFIG/swarm/web/server.py"
+    "$HOME/.config/opencode/swarm/web/server.py"
+    "$REPO_DIR/web/server.py"
+    "/home/omicron/Documentos/opencode_config/web/server.py"
+  )
+  for p in "${candidates[@]}"; do
+    if [ -f "$p" ]; then
+      echo "$p"
+      return 0
+    fi
+  done
+  return 1
+}
 
 # Source installed libraries
 if [ -f "$ECC_CONFIG/lib/ui.sh" ]; then
@@ -56,7 +96,9 @@ Commands:
   live        Real-time multi-window swarm monitor (use --watch for auto-refresh)
   web         Launch Swarm Cockpit & GetBrain Web Dashboard (use --open to view)
   team        Display real-time multi-agent team board and active tasks
+  test        Real-time test suite runner, endpoint probing, and component check
   memory      Query persistent context memory (e.g. 'ecc memory auth' or 'ecc memory')
+  sentinel    Inspect development rules, violations, and compliance reports
   validate    Verify integrity of JSON, JSONC, agent definitions, and skills
   configure   Re-run the interactive configuration wizard
   update      Pull latest version from git repository and re-apply
@@ -66,8 +108,13 @@ Commands:
 Examples:
   ecc doctor
   ecc live --watch
+  ecc test
+  ecc test --watch
+  ecc test --probe http://localhost:4040/health
+  ecc test --component web/server.py
   ecc web --open
   ecc team
+  ecc sentinel --rules
   ecc memory "database conventions"
   ecc validate
 
@@ -109,7 +156,15 @@ cmd_doctor() {
   # Config directory & core files
   if [ -d "$ECC_CONFIG" ]; then
     log "Config directory: $ECC_CONFIG"
-    for f in opencode.jsonc opencode.json tui.json INSTRUCTIONS.md AGENTS.md; do
+    if [ -f "$ECC_CONFIG/opencode.jsonc" ]; then
+      log "  ✓ opencode.jsonc"
+    elif [ -f "$ECC_CONFIG/opencode.json" ]; then
+      log "  ✓ opencode.json"
+    else
+      warn "  ✗ opencode.jsonc (missing)"
+      issues=$((issues + 1))
+    fi
+    for f in INSTRUCTIONS.md AGENTS.md; do
       if [ -f "$ECC_CONFIG/$f" ]; then
         log "  ✓ $f"
       else
@@ -136,19 +191,15 @@ cmd_doctor() {
   fi
 
   # Native MCP Servers
-  if [ -f "$ECC_CONFIG/mcp/context-memory/server.py" ]; then
-    log "MCP Server [context-memory]: $ECC_CONFIG/mcp/context-memory/server.py"
-  else
-    warn "MCP Server [context-memory] missing"
-    issues=$((issues + 1))
-  fi
-
-  if [ -f "$ECC_CONFIG/mcp/team-collab/server.py" ]; then
-    log "MCP Server [team-collab]: $ECC_CONFIG/mcp/team-collab/server.py"
-  else
-    warn "MCP Server [team-collab] missing"
-    issues=$((issues + 1))
-  fi
+  for mcp_name in context-memory team-collab swarm-sentinel swarm-tester; do
+    local s_script
+    if s_script=$(find_mcp_server "$mcp_name"); then
+      log "MCP Server [$mcp_name]: $s_script"
+    else
+      warn "MCP Server [$mcp_name] missing"
+      issues=$((issues + 1))
+    fi
+  done
 
   # Skills
   if [ -d "$ECC_SKILLS" ]; then
@@ -257,6 +308,24 @@ cmd_status() {
     echo -e "    ${C_GREEN}✓${C_NC} team-collab (ready, database will initialize on first use)"
   fi
 
+  local sentinel_db="${OPENCODE_SENTINEL_DB:-$HOME/.opencode/sentinel/sentinel.db}"
+  if [ -f "$sentinel_db" ]; then
+    local rcount; rcount=$(python3 -c "import sqlite3; conn=sqlite3.connect('$sentinel_db'); print(conn.execute('SELECT COUNT(*) FROM sentinel_rules WHERE enabled=1').fetchone()[0])" 2>/dev/null || echo "7")
+    local vcount; vcount=$(python3 -c "import sqlite3; conn=sqlite3.connect('$sentinel_db'); print(conn.execute('SELECT COUNT(*) FROM sentinel_violations WHERE resolved=0').fetchone()[0])" 2>/dev/null || echo "0")
+    echo -e "    ${C_GREEN}✓${C_NC} swarm-sentinel (Rules & Audit): $rcount active rule(s), $vcount open violation(s)"
+  else
+    echo -e "    ${C_GREEN}✓${C_NC} swarm-sentinel (ready, 7 engineering rules active)"
+  fi
+
+  local tester_db="${OPENCODE_TESTER_DB:-$HOME/.opencode/tester/tester.db}"
+  if [ -f "$tester_db" ]; then
+    local run_count; run_count=$(python3 -c "import sqlite3; conn=sqlite3.connect('$tester_db'); print(conn.execute('SELECT COUNT(*) FROM tester_runs').fetchone()[0])" 2>/dev/null || echo "0")
+    local comp_count; comp_count=$(python3 -c "import sqlite3; conn=sqlite3.connect('$tester_db'); print(conn.execute('SELECT COUNT(*) FROM component_checks').fetchone()[0])" 2>/dev/null || echo "0")
+    echo -e "    ${C_GREEN}✓${C_NC} swarm-tester (Live Testing & Probes): $run_count test run(s), $comp_count component check(s)"
+  else
+    echo -e "    ${C_GREEN}✓${C_NC} swarm-tester (ready, continuous automated testing engine)"
+  fi
+
   # Skills
   echo ""
   echo -e "  ${C_BOLD}Skills Library:${C_NC}"
@@ -271,36 +340,25 @@ cmd_status() {
 # ─── Team Board ───
 
 cmd_team() {
-  local server_script="$ECC_CONFIG/mcp/team-collab/server.py"
-  if [ ! -f "$server_script" ]; then
-    # Fallback to repo dir
-    local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    server_script="$repo_dir/mcp/team-collab/server.py"
+  local server_script
+  if ! server_script=$(find_mcp_server "team-collab"); then
+    issue "team-collab server script not found"
+    exit 1
   fi
 
-  if [ -f "$server_script" ]; then
-    python3 -c "
+  python3 -c "
 import sys
 sys.path.insert(0, '$(dirname "$server_script")')
 import server
 print(server.tool_team_get_status({}))
 "
-  else
-    issue "team-collab server script not found"
-    exit 1
-  fi
 }
 
 # ─── Live Swarm Activity Monitor ───
 
 cmd_live() {
-  local server_script="$ECC_CONFIG/mcp/team-collab/server.py"
-  if [ ! -f "$server_script" ]; then
-    local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    server_script="$repo_dir/mcp/team-collab/server.py"
-  fi
-
-  if [ ! -f "$server_script" ]; then
+  local server_script
+  if ! server_script=$(find_mcp_server "team-collab"); then
     issue "team-collab server script not found"
     exit 1
   fi
@@ -338,13 +396,8 @@ print(server.tool_team_get_live_activity({}))
 # ─── Swarm Web Cockpit & GetBrain Server ───
 
 cmd_web() {
-  local server_script="$ECC_CONFIG/web/server.py"
-  if [ ! -f "$server_script" ]; then
-    local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    server_script="$repo_dir/web/server.py"
-  fi
-
-  if [ ! -f "$server_script" ]; then
+  local server_script
+  if ! server_script=$(find_web_server); then
     issue "Swarm web server script not found"
     exit 1
   fi
@@ -360,13 +413,8 @@ cmd_web() {
 # ─── Memory Inspector ───
 
 cmd_memory() {
-  local server_script="$ECC_CONFIG/mcp/context-memory/server.py"
-  if [ ! -f "$server_script" ]; then
-    local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    server_script="$repo_dir/mcp/context-memory/server.py"
-  fi
-
-  if [ ! -f "$server_script" ]; then
+  local server_script
+  if ! server_script=$(find_mcp_server "context-memory"); then
     issue "context-memory server script not found"
     exit 1
   fi
@@ -389,6 +437,153 @@ print(server.tool_get_active_context({'project': 'global'}))
   fi
 }
 
+# ─── Sentinel (Rule Guardian) ───
+
+cmd_sentinel() {
+  local server_script
+  if ! server_script=$(find_mcp_server "swarm-sentinel"); then
+    issue "swarm-sentinel server script not found"
+    exit 1
+  fi
+
+  local action="${1:-report}"
+  case "$action" in
+    rules|--rules|-r)
+      python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_sentinel_get_rules({}))
+"
+      ;;
+    violations|--violations|-v)
+      python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_sentinel_verify_compliance({}))
+"
+      ;;
+    report|--report|*)
+      python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_sentinel_get_compliance_report({}))
+"
+      ;;
+  esac
+}
+
+# ─── Live Tester (Real-Time Testing Engine) ───
+
+cmd_test() {
+  local server_script
+  if ! server_script=$(find_mcp_server "swarm-tester"); then
+    issue "swarm-tester server script not found"
+    exit 1
+  fi
+
+  local action="${1:-suite}"
+  case "$action" in
+    --watch|-w|watch)
+      echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
+      echo -e "${C_CYAN}${C_BOLD}  ecc test --watch — Continuous Live Verification Loop   ${C_NC}"
+      echo -e "${C_CYAN}${C_BOLD}══════════════════════════════════════════════════════════${C_NC}"
+      echo "Monitoring project changes every 3s. Press Ctrl+C to stop."
+      echo ""
+      python3 -c "
+import sys, time, json
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+
+while True:
+    try:
+        report = server.tool_tester_quick_check({})
+        health = report.get('health', 'UNKNOWN')
+        mod_count = len(report.get('modified_files', []))
+        passed = report.get('passed', True)
+        color = '\033[32m' if passed else '\033[31m'
+        print(f'\r\033[K[Live Tester] Health: {color}{health}\033[0m | Changed: {mod_count} files | Passed: {passed}', end='', flush=True)
+        if not passed:
+            print('\n' + json.dumps(report, indent=2))
+        time.sleep(3)
+    except KeyboardInterrupt:
+        print('\nStopped live watch.')
+        break
+    except Exception as e:
+        print(f'\nError in live tester: {e}')
+        time.sleep(3)
+"
+      ;;
+    --probe|-p|probe)
+      local target_url="${2:-http://localhost:4040/health}"
+      python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_tester_probe_endpoint({'url': '$target_url'}))
+"
+      ;;
+    --component|-c|component)
+      local comp_path="${2:-}"
+      if [ -z "$comp_path" ]; then
+        issue "Please specify component file path: ecc test --component <path>"
+        exit 1
+      fi
+      python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_tester_verify_component({'file_path': '$comp_path'}))
+"
+      ;;
+    --health|health)
+      python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_tester_get_live_health({}))
+"
+      ;;
+    --sync|sync)
+      python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+print(server.tool_tester_sync_with_sentinel({}))
+"
+      ;;
+    suite|--suite|*)
+      local target=""
+      local runner="auto"
+      if [ "$action" = "suite" ] || [ "$action" = "--suite" ]; then
+        target="${2:-}"
+      elif [ -n "$action" ]; then
+        target="$action"
+      fi
+
+      case "$target" in
+        pytest|unittest|vitest|jest|cargo|go|npm|bun)
+          runner="$target"
+          target=""
+          ;;
+      esac
+
+      python3 -c "
+import sys, json
+sys.path.insert(0, '$(dirname "$server_script")')
+import server
+res = server.tool_tester_run_suite({'path': '$target', 'runner': '$runner', 'auto_sync_sentinel': True})
+if isinstance(res, str):
+    print(res)
+else:
+    print(json.dumps(res, indent=2))
+"
+      ;;
+  esac
+}
+
 # ─── Validate ───
 
 cmd_validate() {
@@ -399,15 +594,16 @@ cmd_validate() {
   local errors=0
 
   # Check required config files
-  local -a required=(
-    "$ECC_CONFIG/opencode.jsonc"
-    "$ECC_CONFIG/opencode.json"
-    "$ECC_CONFIG/tui.json"
-    "$ECC_CONFIG/INSTRUCTIONS.md"
-    "$ECC_CONFIG/AGENTS.md"
-  )
+  if [ -f "$ECC_CONFIG/opencode.jsonc" ]; then
+    log "  ✓ opencode.jsonc"
+  elif [ -f "$ECC_CONFIG/opencode.json" ]; then
+    log "  ✓ opencode.json"
+  else
+    issue "  ✗ opencode.jsonc or opencode.json (missing)"
+    errors=$((errors + 1))
+  fi
 
-  for f in "${required[@]}"; do
+  for f in "$ECC_CONFIG/INSTRUCTIONS.md" "$ECC_CONFIG/AGENTS.md"; do
     if [ -f "$f" ]; then
       log "  ✓ $(basename "$f")"
     else
@@ -487,7 +683,7 @@ PYEOF
   fi
 
   # Validate MCP server syntax
-  for ms in "$ECC_CONFIG/mcp/context-memory/server.py" "$ECC_CONFIG/mcp/team-collab/server.py"; do
+  for ms in "$ECC_CONFIG/mcp/context-memory/server.py" "$ECC_CONFIG/mcp/team-collab/server.py" "$ECC_CONFIG/mcp/swarm-sentinel/server.py" "$ECC_CONFIG/mcp/swarm-tester/server.py"; do
     if [ -f "$ms" ]; then
       if python3 -m py_compile "$ms" 2>/dev/null; then
         log "  ✓ $(basename "$(dirname "$ms")")/server.py (compiled cleanly)"
@@ -563,6 +759,8 @@ cmd_uninstall() {
   echo "    $HOME/.local/bin/ecc"
   echo "    $HOME/.local/bin/opencode-context-memory"
   echo "    $HOME/.local/bin/opencode-team-collab"
+  echo "    $HOME/.local/bin/opencode-swarm-sentinel"
+  echo "    $HOME/.local/bin/opencode-swarm-tester"
   echo ""
 
   local answer
@@ -579,7 +777,7 @@ cmd_uninstall() {
 
   rm -rf "$ECC_CONFIG" && log "Removed config: $ECC_CONFIG" || warn "Failed to remove config"
   rm -rf "$ECC_SKILLS" && log "Removed skills: $ECC_SKILLS" || warn "Failed to remove skills"
-  rm -f "$HOME/.local/bin/ecc" "$HOME/.local/bin/opencode-context-memory" "$HOME/.local/bin/opencode-team-collab" 2>/dev/null || true
+  rm -f "$HOME/.local/bin/ecc" "$HOME/.local/bin/opencode-context-memory" "$HOME/.local/bin/opencode-team-collab" "$HOME/.local/bin/opencode-swarm-sentinel" "$HOME/.local/bin/opencode-swarm-tester" 2>/dev/null || true
 
   echo ""
   log "Uninstall complete. Backups saved alongside original locations."
@@ -606,6 +804,12 @@ main() {
       ;;
     memory|recall|ctx)
       cmd_memory "${@:2}"
+      ;;
+    sentinel|audit|guard|compliance)
+      cmd_sentinel "${@:2}"
+      ;;
+    test|testing|suite)
+      cmd_test "${@:2}"
       ;;
     validate|verify)
       cmd_validate

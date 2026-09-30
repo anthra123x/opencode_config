@@ -11,6 +11,16 @@
       "command": ["opencode-team-collab"],
       "enabled": true
     },
+    "swarm-sentinel": {
+      "type": "local",
+      "command": ["opencode-swarm-sentinel"],
+      "enabled": true
+    },
+    "swarm-tester": {
+      "type": "local",
+      "command": ["opencode-swarm-tester"],
+      "enabled": true
+    },
     "codebase-memory-mcp": {
       "type": "local",
       "command": ["codebase-memory-mcp"],

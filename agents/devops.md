@@ -1,6 +1,6 @@
 ---
 description: Specialized DevOps and Infrastructure Engineer. Crafts lean multi-stage Dockerfiles, Docker Compose setups, non-root configurations, CI/CD pipelines, and environment deployments.
-mode: subagent
+mode: all
 color: "#06B6D4"
 ---
 

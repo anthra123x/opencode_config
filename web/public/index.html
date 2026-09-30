@@ -40,10 +40,23 @@
         <span>GetBrain Graph</span>
         <span class="badge-counter" id="brainNodesCount">0</span>
       </button>
+      <button class="nav-tab" id="tabTester" onclick="switchView('tester')">
+        <span class="tab-icon">🧪</span>
+        <span>Live Tester</span>
+        <span class="badge-counter" id="testPassCount">0</span>
+      </button>
     </nav>
 
     <!-- Header Actions & Live Status -->
     <div class="header-right">
+      <div class="sentinel-pill" id="sentinelPill" style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; font-weight: 600; color: #34d399; margin-right: 8px;" title="Swarm Sentinel: Supervisor continuo de reglas de desarrollo">
+        <span>🛡️</span>
+        <span id="sentinelStatusText">SENTINEL: COMPLIANT (100%)</span>
+      </div>
+      <div class="tester-pill" id="testerPill" onclick="switchView('tester')" style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); font-size: 11px; font-weight: 600; color: #60a5fa; margin-right: 12px; cursor: pointer;" title="Swarm Live Tester: Monitoreo en tiempo real (Click para ver)">
+        <span>🧪</span>
+        <span id="testerStatusText">TESTER: HEALTHY</span>
+      </div>
       <div class="live-indicator">
         <span class="pulse-dot"></span>
         <span class="live-text" id="liveStatusText">LIVE SSE</span>
@@ -255,6 +268,76 @@
         </div>
       </aside>
 
+    </section>
+
+    <!-- VIEW 3: SWARM LIVE TESTER -->
+    <section id="viewTester" class="view-panel">
+      <!-- Tester Hero Status -->
+      <div class="panel-section" style="margin-bottom: 20px;">
+        <div class="section-title-bar" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9)); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+              <span style="font-size: 24px;">🧪</span>
+              <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: #f8fafc;">Swarm Live Tester & Component Verifier</h2>
+              <span id="testerHealthBadge" style="padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">HEALTHY</span>
+            </div>
+            <p style="margin: 0; font-size: 13px; color: #94a3b8;">Verificación continua en tiempo real, sondeo de endpoints locales y puente supervisor con Swarm Sentinel.</p>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="text" id="testPathInput" placeholder="Ruta o archivo de prueba (opcional)" style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 8px 12px; color: #f8fafc; font-size: 13px; width: 220px;" />
+            <button class="btn btn-primary" id="btnRunTests" onclick="triggerRunTests()" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-weight: 600;">
+              <span>▶</span>
+              <span>Ejecutar Tests Ahora</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Split View: Runs on Left, Probes & Components on Right -->
+      <div class="dashboard-split">
+        <!-- Left: Test Suite Runs -->
+        <div class="panel-card" style="flex: 1.2;">
+          <div class="card-header">
+            <div class="card-title">
+              <span>📋</span>
+              <h3>Historial de Ejecuciones de Pruebas</h3>
+            </div>
+            <span class="badge-counter" id="testRunsCount">0</span>
+          </div>
+          <div class="card-body" id="testRunsList" style="max-height: 580px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px;">
+            <div class="empty-state">No hay ejecuciones de pruebas registradas todavía.</div>
+          </div>
+        </div>
+
+        <!-- Right: Endpoint Probes & Component Checks -->
+        <div class="panel-card" style="flex: 1;">
+          <!-- Endpoint Probe Action -->
+          <div class="card-header" style="border-bottom: 1px solid rgba(148, 163, 184, 0.1); padding-bottom: 12px;">
+            <div class="card-title">
+              <span>🌐</span>
+              <h3>Sondas de Endpoints Locales</h3>
+            </div>
+          </div>
+          <div style="padding: 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); display: flex; gap: 8px;">
+            <input type="text" id="probeUrlInput" placeholder="http://localhost:3000/api/health" value="http://localhost:4040/api/status" style="flex: 1; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; padding: 6px 10px; color: #f8fafc; font-size: 12px;" />
+            <button class="btn btn-secondary" onclick="triggerProbeEndpoint()" style="padding: 6px 12px; font-size: 12px; font-weight: 600;">Probar</button>
+          </div>
+          <div id="endpointProbesList" style="max-height: 220px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div class="empty-state">Sin sondeos recientes.</div>
+          </div>
+
+          <!-- Component Verification -->
+          <div class="card-header" style="border-top: 1px solid rgba(148, 163, 184, 0.1); border-bottom: 1px solid rgba(148, 163, 184, 0.1); padding: 12px; margin-top: 8px;">
+            <div class="card-title">
+              <span>🧩</span>
+              <h3>Verificaciones Estáticas de Componentes</h3>
+            </div>
+          </div>
+          <div id="componentChecksList" style="max-height: 250px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div class="empty-state">Sin verificaciones de componentes registradas.</div>
+          </div>
+        </div>
+      </div>
     </section>
 
   </main>

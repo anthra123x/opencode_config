@@ -17,6 +17,14 @@ import random
 from pathlib import Path
 from contextlib import contextmanager
 
+class ManagedConnection(sqlite3.Connection):
+    """Close SQLite handles deterministically when short-lived tool scopes end."""
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
 # Setup paths
 DEFAULT_TEAM_DIR = Path.home() / ".opencode" / "team"
 DB_PATH = Path(os.environ.get("OPENCODE_TEAM_DB", DEFAULT_TEAM_DIR / "team_collab.db"))
@@ -102,7 +110,7 @@ def get_current_branch():
 
 def get_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), timeout=30.0, isolation_level=None)
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0, isolation_level=None, factory=ManagedConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL;")
     conn.execute("PRAGMA busy_timeout = 30000;")
@@ -433,6 +441,19 @@ TOOLS = [
                 "project": {"type": "string", "description": "Project scope (defaults to current project)"}
             },
             "required": ["agent_name"]
+        }
+    },
+    {
+        "name": "team_wait_for_task",
+        "description": "Wait for a task to reach completed or ready_for_review status without halting OpenCode iteration (polls safely up to timeout).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "integer", "description": "ID of the task to wait for"},
+                "timeout_seconds": {"type": "integer", "description": "Maximum seconds to wait (default 30, max 120)"},
+                "project": {"type": "string", "description": "Project scope (defaults to current project)"}
+            },
+            "required": ["task_id"]
         }
     }
 ]
@@ -1141,6 +1162,35 @@ def tool_team_check_triggers(args):
 
     return "\n".join(lines)
 
+def tool_team_wait_for_task(args):
+    """Wait for a task to reach completed or ready_for_review status without halting OpenCode."""
+    task_id = int(args.get("task_id", 0))
+    timeout_sec = min(max(int(args.get("timeout_seconds", 30)), 1), 120)
+    project = get_current_project(args.get("project"))
+
+    if not task_id:
+        return "Error: task_id is required."
+
+    conn = get_db()
+    try:
+        start_time = time.time()
+        while time.time() - start_time < timeout_sec:
+            cur = conn.execute("SELECT id, title, assigned_to, status, notes FROM team_tasks WHERE id = ? AND (project = ? OR project = 'default')", (task_id, project))
+            task = cur.fetchone()
+            if not task:
+                return f"Task #{task_id} not found in [{project}]."
+            if task["status"] in ("completed", "ready_for_review", "blocked"):
+                return f"✓ Task #{task_id} ('{task['title']}') reached {task['status'].upper()} (by @{task['assigned_to']}). Notes: {task['notes'] or 'None'}."
+            time.sleep(1.0)
+
+        cur = conn.execute("SELECT id, title, assigned_to, status FROM team_tasks WHERE id = ? AND (project = ? OR project = 'default')", (task_id, project))
+        task = cur.fetchone()
+        status_str = task["status"].upper() if task else "UNKNOWN"
+        assigned = task["assigned_to"] if task else "unassigned"
+        return f"⏳ Polling timeout ({timeout_sec}s): Task #{task_id} is currently {status_str} (assigned to @{assigned}). Iteration will continue without crashing."
+    finally:
+        conn.close()
+
 TOOL_HANDLERS = {
     "team_broadcast": tool_team_broadcast,
     "team_read_feed": tool_team_read_feed,
@@ -1157,6 +1207,7 @@ TOOL_HANDLERS = {
     "team_handoff": tool_team_handoff,
     "team_trigger_agent": tool_team_trigger_agent,
     "team_check_triggers": tool_team_check_triggers,
+    "team_wait_for_task": tool_team_wait_for_task,
 }
 
 # MCP JSON-RPC Stdio Loop

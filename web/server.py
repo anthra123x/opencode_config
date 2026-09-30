@@ -30,11 +30,14 @@ import importlib.util
 SERVER_DIR = Path(__file__).resolve().parent
 PUBLIC_DIR = SERVER_DIR / "public"
 
-# Dynamically locate and load team-collab MCP server module
+# Dynamically locate and load MCP server modules
+xdg_config = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+
+# 1. Team Collab
 possible_team_paths = [
     SERVER_DIR.parent / "mcp" / "team-collab" / "server.py",
-    Path.home() / ".config" / "opencode" / "mcp" / "team-collab" / "server.py",
-    Path("/home/omicron/Documentos/opencodeconfig/mcp/team-collab/server.py")
+    xdg_config / "opencode" / "swarm" / "mcp" / "team-collab" / "server.py",
+    xdg_config / "opencode" / "mcp" / "team-collab" / "server.py",
 ]
 team_server_path = None
 for p in possible_team_paths:
@@ -49,11 +52,11 @@ team_spec = importlib.util.spec_from_file_location("team_collab_server", str(tea
 team_server = importlib.util.module_from_spec(team_spec)
 team_spec.loader.exec_module(team_server)
 
-# Dynamically locate and load context-memory MCP server module
+# 2. Context Memory
 possible_mem_paths = [
     SERVER_DIR.parent / "mcp" / "context-memory" / "server.py",
-    Path.home() / ".config" / "opencode" / "mcp" / "context-memory" / "server.py",
-    Path("/home/omicron/Documentos/opencodeconfig/mcp/context-memory/server.py")
+    xdg_config / "opencode" / "swarm" / "mcp" / "context-memory" / "server.py",
+    xdg_config / "opencode" / "mcp" / "context-memory" / "server.py",
 ]
 mem_server_path = None
 for p in possible_mem_paths:
@@ -67,6 +70,48 @@ if mem_server_path:
         mem_spec = importlib.util.spec_from_file_location("context_memory_server", str(mem_server_path))
         mem_server = importlib.util.module_from_spec(mem_spec)
         mem_spec.loader.exec_module(mem_server)
+    except Exception:
+        pass
+
+# 3. Swarm Sentinel
+possible_sentinel_paths = [
+    SERVER_DIR.parent / "mcp" / "swarm-sentinel" / "server.py",
+    xdg_config / "opencode" / "swarm" / "mcp" / "swarm-sentinel" / "server.py",
+    xdg_config / "opencode" / "mcp" / "swarm-sentinel" / "server.py",
+]
+sentinel_server_path = None
+for p in possible_sentinel_paths:
+    if p.exists():
+        sentinel_server_path = p
+        break
+
+sentinel_server = None
+if sentinel_server_path:
+    try:
+        sentinel_spec = importlib.util.spec_from_file_location("swarm_sentinel_server", str(sentinel_server_path))
+        sentinel_server = importlib.util.module_from_spec(sentinel_spec)
+        sentinel_spec.loader.exec_module(sentinel_server)
+    except Exception:
+        pass
+
+# 4. Swarm Live Tester
+possible_tester_paths = [
+    SERVER_DIR.parent / "mcp" / "swarm-tester" / "server.py",
+    xdg_config / "opencode" / "swarm" / "mcp" / "swarm-tester" / "server.py",
+    xdg_config / "opencode" / "mcp" / "swarm-tester" / "server.py",
+]
+tester_server_path = None
+for p in possible_tester_paths:
+    if p.exists():
+        tester_server_path = p
+        break
+
+tester_server = None
+if tester_server_path:
+    try:
+        tester_spec = importlib.util.spec_from_file_location("swarm_tester_server", str(tester_server_path))
+        tester_server = importlib.util.module_from_spec(tester_spec)
+        tester_spec.loader.exec_module(tester_server)
     except Exception:
         pass
 
@@ -119,6 +164,18 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
             return
         sys.stderr.write(f"[OpenCode Swarm Web] {msg}\n")
 
+    def _request_is_local(self):
+        """Reject non-local DNS rebinding; allow standard localhost/loopback browsing."""
+        host = self.headers.get("Host", "")
+        if host:
+            try:
+                host_name = host.split(":")[0].strip("[]")
+                if host_name not in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+                    return False
+            except Exception:
+                pass
+        return True
+
     def _send_json(self, data, status=200):
         try:
             body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -127,18 +184,33 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Cache-Control", "no-cache")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
             self.end_headers()
             self.wfile.write(body)
         except Exception:
             pass
 
     def do_GET(self):
+        if not self._request_is_local():
+            self.send_error(403, "Local dashboard access only")
+            return
         url = self.path.split("?")[0]
 
         # Handle favicon quickly to prevent 404 logs
         if url == "/favicon.ico":
             self.send_response(204)
             self.end_headers()
+            return
+
+        # 0. Health check endpoint
+        if url in ("/health", "/api/health"):
+            self._send_json({
+                "status": "ok",
+                "service": "opencode-cockpit",
+                "project": self.server.project_name,
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            })
             return
 
         # 1. API: Swarm Status (Isolated per project)
@@ -302,6 +374,100 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
             self._send_json(brain_data)
             return
 
+        # 6b. API: Swarm Sentinel Compliance & Rules
+        if url == "/api/sentinel":
+            proj = self.server.project_name
+            sentinel_data = {
+                "project": proj,
+                "status": "COMPLIANT",
+                "score": 100,
+                "rules": [],
+                "violations": [],
+                "audits": []
+            }
+            if sentinel_server:
+                try:
+                    s_conn = sentinel_server.get_db()
+                    cur_r = s_conn.execute("SELECT rule_code, title, category, target_agent, severity, description, checklist FROM sentinel_rules")
+                    sentinel_data["rules"] = [dict(r) for r in cur_r.fetchall()]
+
+                    cur_v = s_conn.execute("""
+                        SELECT id, agent_name, rule_code, severity, details, status, created_at
+                        FROM sentinel_violations
+                        WHERE project = ? OR project = 'default'
+                        ORDER BY id DESC LIMIT 15
+                    """, (proj,))
+                    sentinel_data["violations"] = [dict(r) for r in cur_v.fetchall()]
+
+                    cur_a = s_conn.execute("""
+                        SELECT id, agent_name, task_title, verdict, score, feedback, created_at
+                        FROM sentinel_audits
+                        WHERE project = ? OR project = 'default'
+                        ORDER BY id DESC LIMIT 15
+                    """, (proj,))
+                    sentinel_data["audits"] = [dict(r) for r in cur_a.fetchall()]
+
+                    avg_cur = s_conn.execute("SELECT avg(score) as a FROM sentinel_audits WHERE project = ? OR project = 'default'", (proj,)).fetchone()
+                    sentinel_data["score"] = int(avg_cur["a"] or 100) if avg_cur and avg_cur["a"] is not None else 100
+                    crit_count = sum(1 for v in sentinel_data["violations"] if v.get("severity") == "critical" and v.get("status") == "open")
+                    sentinel_data["status"] = "NON-COMPLIANT" if crit_count > 0 else "COMPLIANT"
+                except Exception:
+                    pass
+            self._send_json(sentinel_data)
+            return
+
+        # 6c. API: Swarm Live Tester Status & Runs
+        if url == "/api/tester":
+            proj = self.server.project_name
+            tester_data = {
+                "project": proj,
+                "health": "MONITORING",
+                "runs": [],
+                "probes": [],
+                "components": []
+            }
+            if tester_server:
+                try:
+                    t_conn = tester_server.get_db()
+                    cur_runs = t_conn.execute("""
+                        SELECT id, runner, target_path, status, total_tests, passed, failed, skipped, coverage_percent, duration_ms, created_at
+                        FROM tester_runs
+                        WHERE project = ? OR project = 'default'
+                        ORDER BY id DESC LIMIT 15
+                    """, (proj,))
+                    tester_data["runs"] = [dict(r) for r in cur_runs.fetchall()]
+
+                    cur_probes = t_conn.execute("""
+                        SELECT id, url, method, expected_status, actual_status, latency_ms, status, created_at
+                        FROM endpoint_probes
+                        WHERE project = ? OR project = 'default'
+                        ORDER BY id DESC LIMIT 15
+                    """, (proj,))
+                    tester_data["probes"] = [dict(r) for r in cur_probes.fetchall()]
+
+                    cur_comps = t_conn.execute("""
+                        SELECT id, file_path, check_type, status, details, duration_ms, created_at
+                        FROM component_checks
+                        WHERE project = ? OR project = 'default'
+                        ORDER BY id DESC LIMIT 15
+                    """, (proj,))
+                    tester_data["components"] = [dict(r) for r in cur_comps.fetchall()]
+                    t_conn.close()
+
+                    latest_run = tester_data["runs"][0] if tester_data["runs"] else None
+                    if latest_run and latest_run["status"] == "FAIL":
+                        tester_data["health"] = "FAILING"
+                    elif any(p["status"] == "FAIL" for p in tester_data["probes"][:3]):
+                        tester_data["health"] = "DEGRADED"
+                    elif latest_run and latest_run["status"] == "PASS":
+                        tester_data["health"] = "HEALTHY"
+                    else:
+                        tester_data["health"] = "MONITORING"
+                except Exception:
+                    pass
+            self._send_json(tester_data)
+            return
+
         # 7. Real-Time Server-Sent Events (SSE) Stream
         if url == "/api/stream":
             self.send_response(200)
@@ -393,6 +559,9 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if not self._request_is_local():
+            self.send_error(403, "Local dashboard access only")
+            return
         url = self.path.split("?")[0]
         content_length = int(self.headers.get("Content-Length", 0))
         post_data = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
@@ -486,6 +655,58 @@ class SwarmWebHandler(SimpleHTTPRequestHandler):
 
             brain_data = brain_builder.build_project_brain(proj, proj_dir)
             self._send_json({"success": True, "message": msg, "brain": brain_data})
+            return
+
+        if url == "/api/sentinel/audit":
+            if not sentinel_server:
+                self._send_json({"error": "Sentinel MCP server not available"}, status=503)
+                return
+            res = sentinel_server.tool_sentinel_audit_task(body)
+            self._send_json({"result": res})
+            return
+
+        if url == "/api/sentinel/violation":
+            if not sentinel_server:
+                self._send_json({"error": "Sentinel MCP server not available"}, status=503)
+                return
+            res = sentinel_server.tool_sentinel_record_violation(body)
+            self._send_json({"result": res})
+            return
+
+        if url == "/api/sentinel/resolve":
+            if not sentinel_server:
+                self._send_json({"error": "Sentinel MCP server not available"}, status=503)
+                return
+            res = sentinel_server.tool_sentinel_resolve_violation(body)
+            self._send_json({"result": res})
+            return
+
+        if url == "/api/tester/run":
+            if not tester_server:
+                self._send_json({"error": "Tester MCP server not available"}, status=503)
+                return
+            target_path = body.get("path", "")
+            runner = body.get("runner", "auto")
+            res_text = tester_server.tool_tester_run_suite({
+                "project": self.server.project_name,
+                "path": target_path,
+                "runner": runner
+            })
+            self._send_json({"result": res_text})
+            return
+
+        if url == "/api/tester/probe":
+            if not tester_server:
+                self._send_json({"error": "Tester MCP server not available"}, status=503)
+                return
+            target_url = body.get("url", "")
+            method = body.get("method", "GET")
+            res_text = tester_server.tool_tester_probe_endpoint({
+                "project": self.server.project_name,
+                "url": target_url,
+                "method": method
+            })
+            self._send_json({"result": res_text})
             return
 
         self._send_json({"error": "Not Found"}, status=404)

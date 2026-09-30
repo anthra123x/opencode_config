@@ -22,18 +22,29 @@ if [ ! -f "$SERVER_SCRIPT" ]; then
 fi
 
 # Ensure dedicated web session & GetBrain monitoring server for this project
+SERVER_PORT="4040"
 if [ -f "$SERVER_SCRIPT" ]; then
-  SERVER_PORT=$(python3 "$SERVER_SCRIPT" --ensure --dir "$PROJECT_DIR" --project "$PROJECT_NAME" 2>/dev/null || echo "4040")
-  if [ -n "$SERVER_PORT" ]; then
+  PORT_DETECTED=$(python3 "$SERVER_SCRIPT" --ensure --dir "$PROJECT_DIR" --project "$PROJECT_NAME" 2>/dev/null || echo "4040")
+  if [ -n "$PORT_DETECTED" ]; then
+    SERVER_PORT="$PORT_DETECTED"
     export OPENCODE_WEB_PORT="$SERVER_PORT"
     export OPENCODE_WEB_URL="http://localhost:$SERVER_PORT"
   fi
 fi
 
-# Set terminal window title
+# Set terminal window title with Swarm branding
 if [[ -t 1 ]]; then
-  echo -ne "\033]0;⚡ ᴏᴘᴇɴᴄᴏᴅᴇ [ꜱᴡᴀʀᴍ] — ${PROJECT_NAME}\007"
+  echo -ne "\033]0;⚡ ᴏᴘᴇɴᴄᴏᴅᴇ ⟪ ꜱᴡᴀʀᴍ ᴇᴅɪᴛɪᴏɴ ⟫ — ${PROJECT_NAME}\007"
 fi
 
-# Launch OpenCode (home tips and plugin display project-specific URL)
+# Display distinctive Swarm identity banner on interactive startup
+if [[ -t 1 ]] && [ "$#" -eq 0 ]; then
+  echo -e "\033[1;38;5;141m⚡ OpenCode ── \033[1;38;5;51m⟪ SWARM EDITION v2.0 ⟫\033[0m"
+  echo -e "\033[38;5;220m  ↳ Alias: \033[1;37mopencode-swarm\033[0m \033[2m(Multi-Agent Autonomous Swarm & Live Verification)\033[0m"
+  echo -e "\033[38;5;102m  ↳ Workspace: \033[38;5;48m${PROJECT_NAME}\033[0m \033[2m| Cockpit:\033[0m \033[4;38;5;75mhttp://localhost:${SERVER_PORT}\033[0m"
+  echo ""
+  sleep 0.3
+fi
+
+# Launch OpenCode (all agents, MCPs, and theme loaded from ~/.config/opencode)
 exec "$REAL_OPENCODE" "$@"
