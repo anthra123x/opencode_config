@@ -317,26 +317,27 @@ Si deseas forzar la apertura del navegador desde tu terminal en cualquier moment
 ecc web --open
 ```
 
-### Características de la Suite Web:
+### Características de la Suite Web (Diseño Minimalista Estilo Linux & Supervisión Pasiva):
+El panel web opera bajo el principio de **supervisión pura (100% pasiva, sin intervención manual)** y una estética **minimalista estilo terminal Linux**: paleta oscura neutra (`#090d13`), tipografía monoespaciada (`JetBrains Mono`), bordes nítidos de 1px sin saturación ni neones estridentes. Toda la ejecución de pruebas y guardado de contexto es realizada automáticamente por los subagentes y MCPs en segundo plano.
+
 1. **Swarm Cockpit (Pestaña 1 - `http://localhost:<puerto>`)**:
-   - **Roster en Tiempo Real**: Tarjetas visuales de los 6 especialistas (`@orchestrator`, `@backend`, `@frontend`, `@git-flow`, `@qa-auditor`, `@devops`) con indicadores de pulso verde en vivo, identificador de ventana de terminal (`term-1-backend`), tarea en curso y tiempo transcurrido.
-   - **Tablero Kanban de Flujo de Trabajo**: Vista sincronizada de tareas Por Hacer, En Curso, Revisión y Completadas con prioridades y notas. Interfaz limpia enfocada en supervisión en vivo.
-   - **Feed de Actividad en Vivo**: Transmisión instantánea mediante **Server-Sent Events (SSE)** de todos los avisos y pases de guardia que ocurren en tus terminales de OpenCode para ese proyecto.
-   - **Contratos & Memorias**: Explorador de especificaciones de API, esquemas y decisiones de arquitectura guardadas en SQLite FTS5.
+   - **Roster en Tiempo Real**: Tarjetas minimalistas de los 6 especialistas (`@orchestrator`, `@backend`, `@frontend`, `@git-flow`, `@qa-auditor`, `@devops`) con indicadores de pulso de estado (`WORKING`, `IDLE`), identificador de ventana o sesión, tarea en curso y tiempo transcurrido.
+   - **Tablero Kanban de Supervisión**: Vista sincronizada de tareas Por Hacer (`TODO`), En Curso (`IN_PROGRESS`), Revisión (`REVIEW`) y Completadas (`COMPLETED`) con prioridades y notas de handoff.
+   - **Feed de Actividad en Vivo (Terminal Log)**: Registro en tiempo real mediante **Server-Sent Events (SSE)** con marca temporal, agente emisor y mensajes del bus de colaboración.
+   - **Contratos & Memorias**: Listado limpio de especificaciones de API, esquemas compartidos y registros de contexto almacenados en SQLite FTS5.
 
 2. **GetBrain Knowledge Graph (Pestaña 2 - `http://localhost:<puerto>/#brain`)**:
-   - **Escáner de Arquitectura Multi-Capa**: Analiza en profundidad la estructura de código real del proyecto en curso (manifiestos, modelos Prisma/SQL, componentes UI, rutas API, servicios y suites de tests), vinculándolos dinámicamente con las decisiones tomadas en memoria.
-   - **Motor de Física 2D Interactivo**: Visualizador en Canvas HTML5 con simulación de fuerzas gravitatorias y resortes, auto-ajuste de escala y partículas de energía que fluyen por los enlaces activos.
-   - **Botón `💾 Checkpoint`**: Permite congelar un punto de control de contexto en cualquier momento, guardando el estado y decisiones en SQLite sin pérdida de contexto.
-   - **Botón `🔄 Escanear`**: Re-analiza la base de código del proyecto activo y sincroniza automáticamente las dependencias y tecnologías detectadas.
-   - **Inspector Lateral de Nodos**: Haz clic en cualquier nodo para ver su especificación técnica, contenido completo, creador y conexiones vinculadas.
-   - **Filtros Dinámicos & Búsqueda**: Filtra por tipo de nodo (Agentes, Tareas, Contratos, Memorias/Checkpoints, Código) o busca por nombre.
+   - **Escáner de Arquitectura Multi-Capa Autónomo**: Mapea en vivo y de forma silenciosa la base de código real del proyecto en curso (manifiestos, modelos Prisma/SQL, componentes UI, rutas API, servicios y suites de tests), vinculándolos dinámicamente con las decisiones y contratos.
+   - **Motor de Física 2D Minimalista**: Canvas interactivo con nodos circulares nítidos y enlaces sobrios, soporte para pan y zoom.
+   - **Supervisión Continua Silenciosa**: El grafo se sincroniza automáticamente con cada acción del enjambre sin requerir botones manuales ni recargas.
+   - **Inspector Lateral de Nodos (Solo Lectura)**: Al hacer clic en cualquier nodo, despliega un panel lateral con su especificación técnica, metadatos, categoría y enlaces vinculados.
+   - **Filtros Dinámicos**: Filtra visualmente por tipo de nodo (agentes, tareas, contratos, memorias, módulos).
 
-3. **Live Tester & Health Cockpit (Pestaña 3 - `http://localhost:<puerto>/#tester`)**:
-   - **Píldora de Salud Reactiva**: Indicador visual global (`HEALTHY`, `DEGRADED`, `FAILING`) con porcentaje de éxito y conteo de pruebas pasadas/fallidas.
-   - **Historial Completo de Corridas**: Tabla en vivo con filtrado rápido (`all`, `passed`, `failed`), runner detectado (`pytest`, `vitest`, etc.), duración en milisegundos y visualización de trazas de error.
-   - **Sondeador de Endpoints en Vivo (`Probe URL`)**: Widget interactivo para probar endpoints locales (ej. `http://localhost:3000/api/health`), mostrando estado HTTP, latencia en ms y payload de respuesta.
-   - **Sincronización Directa con Sentinel**: Enlace directo de auditoría para certificar entregables o bloquear merge/handoff en caso de fallo.
+3. **Live Telemetry & Automated Verification (Pestaña 3 - `http://localhost:<puerto>/#tester`)**:
+   - **Insignia de Salud del Sistema**: Estado global calculado automáticamente (`HEALTHY`, `DEGRADED`, `FAILING`) y métricas estilo terminal (`htop`/`neofetch`).
+   - **Historial de Suites de Prueba (Stream Pasivo)**: Registro en tiempo real de las suites de prueba ejecutadas por el enjambre (`PASS`/`FAIL`, runner, duración en milisegundos, aserciones y consola colapsable).
+   - **Sondeos de Endpoints & Component Checks**: Telemetría continua de disponibilidad de endpoints y verificación estática de componentes emitidos por `swarm-tester`.
+   - **Cero Intervención Manual**: No requiere botones de ejecución manual en el navegador; las pruebas se disparan y reportan automáticamente desde el flujo de trabajo del enjambre o CLI.
 
 ---
 

@@ -381,8 +381,8 @@ async function fetchBrainGraph() {
   try {
     const res = await fetch('/api/brain');
     const data = await res.json();
-    state.brain = data;
-    document.getElementById('brainNodesCount').textContent = data.nodes ? data.nodes.length : 0;
+    const bnc = document.getElementById('brainNodesCount');
+    if (bnc) bnc.textContent = data.nodes ? data.nodes.length : 0;
     setupBrainSimulation(data.nodes, data.links);
   } catch (err) {
     console.error('Error fetching brain graph:', err);
@@ -498,7 +498,8 @@ function renderAgents(agentsList) {
   });
 
   container.innerHTML = html;
-  document.getElementById('activeAgentsBadge').textContent = `${activeCount} Agente(s) en Ejecución`;
+  const aab = document.getElementById('activeAgentsBadge');
+  if (aab) aab.textContent = `${activeCount} Agente(s) en Ejecución`;
 }
 
 function renderKanban(tasksList) {
@@ -542,13 +543,19 @@ function renderKanban(tasksList) {
     `;
   });
 
-  document.getElementById('countTodo').textContent = counts.todo;
-  document.getElementById('countInProgress').textContent = counts.in_progress;
-  document.getElementById('countReview').textContent = counts.review;
-  document.getElementById('countCompleted').textContent = counts.completed;
+  const cTodo = document.getElementById('countTodo');
+  if (cTodo) cTodo.textContent = counts.todo;
+  const cInProg = document.getElementById('countInProgress');
+  if (cInProg) cInProg.textContent = counts.in_progress;
+  const cRev = document.getElementById('countReview');
+  if (cRev) cRev.textContent = counts.review;
+  const cComp = document.getElementById('countCompleted');
+  if (cComp) cComp.textContent = counts.completed;
 
   Object.keys(cols).forEach(k => {
-    cols[k].innerHTML = htmls[k] || '<div style="font-size:11px; color:#475569; padding:8px; text-align:center;">Sin tareas</div>';
+    if (cols[k]) {
+      cols[k].innerHTML = htmls[k] || '<div style="font-size:11px; color:#475569; padding:8px; text-align:center;">Sin tareas</div>';
+    }
   });
 }
 
@@ -581,7 +588,11 @@ function renderFeed(messages) {
 
 function renderArtifacts(artifacts) {
   const container = document.getElementById('artifactsList');
-  document.getElementById('artifactsCountBadge').textContent = `${artifacts.length} Contrato(s)`;
+  const acb = document.getElementById('artifactsCountBadge');
+  const count = artifacts ? artifacts.length : 0;
+  if (acb) acb.textContent = `${count} Contrato(s)`;
+  if (!container) return;
+
   if (!artifacts || artifacts.length === 0) {
     container.innerHTML = '<div class="empty-state">No hay contratos compartidos aún.</div>';
     return;
@@ -604,7 +615,11 @@ function renderArtifacts(artifacts) {
 
 function renderMemories(memories) {
   const container = document.getElementById('memoriesList');
-  document.getElementById('memoriesCountBadge').textContent = `${memories.length} Recuerdo(s)`;
+  const mcb = document.getElementById('memoriesCountBadge');
+  const count = memories ? memories.length : 0;
+  if (mcb) mcb.textContent = `${count} Recuerdo(s)`;
+  if (!container) return;
+
   if (!memories || memories.length === 0) {
     container.innerHTML = '<div class="empty-state">No hay recuerdos almacenados aún.</div>';
     return;
@@ -814,7 +829,7 @@ function drawGraph() {
 
   const timeNow = Date.now() * 0.002;
 
-  // 1. Draw Links
+  // 1. Draw Links (Subtle terminal wireframe)
   for (let i = 0; i < graphLinks.length; i++) {
     const link = graphLinks[i];
     const a = link.sourceNode;
@@ -829,81 +844,79 @@ function drawGraph() {
     const isSelected = (state.selectedNode && (state.selectedNode === a || state.selectedNode === b));
 
     if (isSelected || isHovered) {
-      ctx.strokeStyle = '#c084fc';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#58a6ff';
+      ctx.lineWidth = 1.5;
     } else {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.strokeStyle = '#21262d';
       ctx.lineWidth = 1;
     }
     ctx.stroke();
 
-    // Animated particles on active links
+    // Subtle single packet dot on active links
     if (link.animated || isSelected) {
-      const particleCount = 2;
-      for (let p = 0; p < particleCount; p++) {
-        const offset = ((timeNow + (p / particleCount)) % 1);
-        const px = a.x + (b.x - a.x) * offset;
-        const py = a.y + (b.y - a.y) * offset;
+      const offset = (timeNow % 1);
+      const px = a.x + (b.x - a.x) * offset;
+      const py = a.y + (b.y - a.y) * offset;
 
-        ctx.beginPath();
-        ctx.arc(px, py, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#a855f7';
-        ctx.shadowColor = '#a855f7';
-        ctx.shadowBlur = 8;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
+      ctx.beginPath();
+      ctx.arc(px, py, 2, 0, Math.PI * 2);
+      ctx.fillStyle = '#58a6ff';
+      ctx.fill();
     }
   }
 
-  // 2. Draw Nodes
+  // 2. Draw Nodes (Minimalist Linux Terminal circles)
   for (let i = 0; i < graphNodes.length; i++) {
     const n = graphNodes[i];
     if (!isNodeVisible(n)) continue;
 
     const isHovered = (hoveredNode === n);
     const isSelected = (state.selectedNode === n);
-    const radius = n.radius * (isSelected ? 1.25 : (isHovered ? 1.15 : 1));
+    const radius = n.radius * (isSelected ? 1.15 : (isHovered ? 1.08 : 1));
 
-    // Glow aura
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, radius + 4, 0, Math.PI * 2);
-    ctx.fillStyle = n.color ? hexToRgba(n.color, isSelected ? 0.45 : 0.15) : 'rgba(255, 255, 255, 0.1)';
-    ctx.fill();
-
-    // Pulse ring for working agents
-    if (n.status === 'working' || n.status === 'in_progress') {
-      const pulseSize = radius + 6 + Math.sin(timeNow * 4) * 4;
+    // Outer indicator ring when selected or hovered
+    if (isSelected || isHovered) {
       ctx.beginPath();
-      ctx.arc(n.x, n.y, pulseSize, 0, Math.PI * 2);
-      ctx.strokeStyle = n.color || '#10b981';
-      ctx.lineWidth = 1.5;
+      ctx.arc(n.x, n.y, radius + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = isSelected ? '#58a6ff' : '#3b485c';
+      ctx.lineWidth = 1;
       ctx.stroke();
     }
 
-    // Node body
+    // Pulse ring for working agents
+    if (n.status === 'working' || n.status === 'in_progress') {
+      const pulseSize = radius + 4 + Math.sin(timeNow * 3) * 3;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, pulseSize, 0, Math.PI * 2);
+      ctx.strokeStyle = '#3fb950';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Node body (Neutral terminal dark background)
     ctx.beginPath();
     ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#161a28';
+    ctx.fillStyle = '#0e131a';
     ctx.fill();
-    ctx.strokeStyle = n.color || '#8b5cf6';
-    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.strokeStyle = isSelected ? '#58a6ff' : (n.color || '#30363d');
+    ctx.lineWidth = isSelected ? 2 : 1.5;
     ctx.stroke();
 
     // Node Glyph / Emoji
     const glyph = n.extra && n.extra.glyph ? n.extra.glyph : (n.type === 'hub' ? '⚡' : n.type === 'task' ? '📋' : n.type === 'artifact' ? '📦' : n.type === 'memory' ? '🧠' : '📄');
-    ctx.font = `${Math.round(radius * 0.9)}px sans-serif`;
+    ctx.font = `${Math.round(radius * 0.85)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(glyph, n.x, n.y);
 
-    // Node Label
-    ctx.font = `${isSelected ? '600 12px' : '500 11px'} Inter, sans-serif`;
-    ctx.fillStyle = isSelected ? '#fff' : '#cbd5e1';
-    ctx.fillText(n.label, n.x, n.y + radius + 14);
+    // Node Label (Monospaced, clean and high-contrast)
+    ctx.font = `${isSelected ? '700 11px' : '500 10px'} "JetBrains Mono", monospace`;
+    ctx.fillStyle = isSelected ? '#f0f6fc' : '#8b949e';
+    ctx.fillText(n.label, n.x, n.y + radius + 13);
   }
 
   ctx.restore();
+}
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1071,7 +1084,7 @@ function resetZoom() {
 function togglePhysics() {
   simRunning = !simRunning;
   const btn = document.getElementById('physicsToggle');
-  btn.textContent = simRunning ? '⏸️' : '▶️';
+  if (btn) btn.textContent = simRunning ? '⏸️' : '▶️';
 }
 
 function toggleFilter(type) {
